@@ -8,8 +8,8 @@ android {
         applicationId = "org.mosqueautosilent.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     compileOptions {
@@ -18,6 +18,7 @@ android {
     }
 
     sourceSets.getByName("test").java.srcDir("../../tests")
+    sourceSets.getByName("main").assets.srcDir("../../data")
 }
 
 dependencies {

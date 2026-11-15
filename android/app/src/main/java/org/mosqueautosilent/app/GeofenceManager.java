@@ -12,6 +12,7 @@ import com.google.android.gms.location.GeofencingClient;
 import com.google.android.gms.location.GeofencingRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
+import java.util.Locale;
 
 /** Registers one circular geofence around the device's current location for a coffee-shop test. */
 public final class GeofenceManager {
@@ -23,6 +24,28 @@ public final class GeofenceManager {
     public GeofenceManager(Context context) {
         this.context = context.getApplicationContext();
         this.client = LocationServices.getGeofencingClient(context);
+    }
+
+    /** Reads a fresh foreground location without moving the configured geofence. */
+    public void refreshCurrentLocation(Callback callback) {
+        boolean fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        if (!fine) { callback.onResult(false, "Grant precise location to refresh the current position."); return; }
+        try {
+            LocationServices.getFusedLocationProviderClient(context)
+                .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                .addOnSuccessListener(location -> {
+                    if (location == null) {
+                        callback.onResult(false, "Current location is unavailable. Turn on Android Location and refresh again.");
+                        return;
+                    }
+                    callback.onResult(true, String.format(Locale.getDefault(),
+                        "Current location · %.5f, %.5f · accuracy ±%.0f m",
+                        location.getLatitude(), location.getLongitude(), location.getAccuracy()));
+                })
+                .addOnFailureListener(error -> callback.onResult(false, "Could not refresh current location: " + error.getMessage()));
+        } catch (SecurityException ex) {
+            callback.onResult(false, "Location permission is missing.");
+        }
     }
 
     public void armAtCurrentLocation(float radiusMetres, Callback callback) {

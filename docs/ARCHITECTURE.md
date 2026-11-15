@@ -1,22 +1,27 @@
-# Mosque Auto-Silent v0.2 architecture
+# Mosque Auto-Silent v0.3 architecture
 
-## Activation
+## Activation and timing
 
-`selected SSID detected AND inside geofence AND now >= Iqama - 30s AND now < Iqama + D`
+Activation requires all of the following:
 
-Defaults: L=30 seconds; D=10 minutes. D is adjustable by the local app operator. The Imam release control restores the saved profile early and suppresses reactivation for that same Iqama event.
+`selected SSID present AND inside the configured geofence AND now >= Iqama - 30 seconds AND now < Iqama + D`
 
-## Presence strategy
+The bundled 2026 Tarfaya Adhan calendar supplies the Adhan time. Iqama offsets are Fajer +23 minutes, Doher +15, Aser +15, Maghrib +10 and Isha +15. D defaults to 10 minutes and can be configured from 1 to 30 minutes. When activated, the app saves the previous ringer mode before silencing. It restores that exact mode on timeout or safety exit.
 
-- Scan on demand during setup.
-- Schedule a scan at Iqama − 60 seconds rather than scanning continuously.
-- Keep a fresh in-range scan result latched through the short prayer session; do not infer absence from a throttled/cached scan.
-- Geofence uses a circular region centred at Tarfaya Mosque: 33.90066, -5.54761. Default radius 100 m, configurable in app. Current device location can be used for coffee-shop testing.
+## Presence
 
-## Permissions
+- The operator explicitly selects a target SSID. Wi-Fi scans are performed during setup and near the next Iqama; Android may throttle scans and return cached results.
+- The phone must be inside the registered geofence. Tarfaya center is 33.90066, -5.54761, with a configurable radius. A current-location test zone is available.
+- Refreshing current location only reads and displays a fresh position. It does not relocate the registered geofence.
 
-Permissions are not all install-time grants. Android runtime permissions and special settings access must be requested in context: precise location, background location, Wi-Fi scan access as required by Android version, and Notification Policy Access.
+## Imam controls and data boundaries
 
-## Limitations
+The Imam tab's End Salat action restores this device's saved ringer mode and marks the current local session ended. Its session and release counters are stored locally. Connected attendee totals and mosque-wide End Salat are unavailable. `backend/worker/` is an un-deployed scaffold, and the app has no authenticated remote-control connection.
 
-The local Imam control only affects the phone running the app. Remote mosque-wide release requires a deployed backend, authenticated mosque-admin role, registered attendee clients and reliable command delivery. MAWAQIT integration remains subject to authorised access.
+## UI
+
+The native app uses a light/dark/system theme, color-coded waiting/ready/active statuses, Home Iqama countdown, Setup, Schedule, Imam and More tabs. Branding uses a project-original vector mark and palette inspired by MAWAQIT's visual direction; there is no affiliation or shared brand asset.
+
+## Permissions and reliability limits
+
+Android runtime permission and system access are requested in context: precise location, background location, Wi-Fi scan access as required by Android, and Notification Policy Access. Scheduled Wi-Fi scanning depends on the prototype process. Process death, Doze, OEM battery controls, permission revocation and background geofence delivery require physical-device validation before relying on unattended operation.

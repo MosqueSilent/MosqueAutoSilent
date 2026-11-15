@@ -1,0 +1,9 @@
+<resources>
+    <color name="brand_primary">#80D8C0</color>
+    <color name="brand_green">#57D2AB</color>
+    <color name="brand_launcher">#103846</color>
+    <color name="app_background">#0C171C</color>
+    <color name="app_surface">#14242B</color>
+    <color name="app_on_surface">#E5F0EF</color>
+    <color name="app_muted">#9AADB1</color>
+</resources>
