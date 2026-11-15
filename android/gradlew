@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Small Gradle bootstrap wrapper for environments where the Gradle wrapper JAR is not bundled.
+set -euo pipefail
+GRADLE_VERSION="8.11.1"
+GRADLE_SHA256="f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6"
+DIST_ROOT="${GRADLE_USER_HOME:-$HOME/.gradle}/manual-wrapper"
+GRADLE_HOME="$DIST_ROOT/gradle-$GRADLE_VERSION"
+if [[ ! -x "$GRADLE_HOME/bin/gradle" ]]; then
+  mkdir -p "$DIST_ROOT"
+  ZIP="$DIST_ROOT/gradle-$GRADLE_VERSION-bin.zip"
+  echo "Downloading Gradle $GRADLE_VERSION..."
+  if command -v curl >/dev/null 2>&1; then curl -fL "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip" -o "$ZIP"; else wget -O "$ZIP" "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip"; fi
+  if command -v sha256sum >/dev/null 2>&1; then echo "$GRADLE_SHA256  $ZIP" | sha256sum -c -; else echo "$GRADLE_SHA256  $ZIP" | shasum -a 256 -c -; fi
+  unzip -q -o "$ZIP" -d "$DIST_ROOT"
+fi
+exec "$GRADLE_HOME/bin/gradle" "$@"

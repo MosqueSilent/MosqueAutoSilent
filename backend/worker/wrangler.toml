@@ -1,0 +1,11 @@
+name = "mosque-auto-silent-control"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[[durable_objects.bindings]]
+name = "MOSQUE_ROOMS"
+class_name = "MosqueRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MosqueRoom"]

@@ -1,0 +1,16 @@
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+
+# Generated binaries
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

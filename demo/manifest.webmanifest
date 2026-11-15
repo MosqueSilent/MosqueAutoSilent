@@ -1,0 +1,9 @@
+{
+  "name": "Mosque Auto-Silent Prototype",
+  "short_name": "Mosque Mode",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f4f7fa",
+  "theme_color": "#102b46",
+  "icons": [{"src":"assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
