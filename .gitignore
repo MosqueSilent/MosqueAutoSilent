@@ -14,3 +14,6 @@ local.properties
 # OS/editor noise
 .DS_Store
 Thumbs.db
+
+# Retrieved CI artifact bundle
+/artifacts/
