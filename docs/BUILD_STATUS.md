@@ -8,11 +8,11 @@
 
 ## Verified CI build
 
-- Workflow run: [Android debug build #2](https://github.com/MosqueSilent/MosqueAutoSilent/actions/runs/43762601281), commit `5498d81557d578ee24485ee41dd2861fc01a9213` — **success**.
+- Workflow run: [Android debug build #4](https://github.com/MosqueSilent/MosqueAutoSilent/actions/runs/43763344205), commit `de7c1a50ee436ce794a59f060a2694dec98c45d3` — **success**.
 - Passing steps: Android SDK setup, browser logic smoke test, Android unit tests (`testDebugUnitTest`), debug APK build (`assembleDebug`), and artifact upload.
-- Artifact: `mosque-auto-silent-debug-apk`, GitHub artifact ID `14181211831` (ZIP size 3,622,942 bytes; retained through 2026-11-29).
+- Artifact: `mosque-auto-silent-debug-apk`, GitHub artifact ID `14181420777` (ZIP size 3,622,942 bytes; retained through 2026-11-29).
 - Retrieved APK: `android/app/build/outputs/apk/debug/app-debug.apk` (4,016,366 bytes). Verified it is a readable APK archive with 434 entries including `AndroidManifest.xml`, `classes.dex`, and `resources.arsc`.
-- APK SHA-256: `e097df26d16f73cf8ad0c4da548c77cf062ea2d5b11d88749f444b497fb5f4f7`.
+- APK SHA-256: `848c9442ee7e3e43de360d5bdb03f8944516a14e73275d21d267099f2c890d7d`.
 - The APK is a local ignored build artifact and is not committed to source control.
 
 ## Environment and remaining verification
