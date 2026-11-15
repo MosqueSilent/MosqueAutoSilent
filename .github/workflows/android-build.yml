@@ -3,7 +3,9 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '**'
+      - 'android/**'
+      - 'tests/**'
+      - '.github/workflows/android-build.yml'
 jobs:
   build:
     runs-on: ubuntu-latest
