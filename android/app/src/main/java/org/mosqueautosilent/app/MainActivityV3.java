@@ -1756,7 +1756,7 @@ class MainActivityV3 extends AppCompatActivity {
         }
         if (value.startsWith("Geofence radius · ")) return "Rayon de géorepérage · " + value.substring("Geofence radius · ".length());
         if (value.startsWith("Current location · ")) return "Position actuelle · " + value.substring("Current location · ".length());
-        if (value.startsWith("Phone profile · ")) return "Profil sonore · " + value.substring("Phone profile · ".length())
+        if (value.startsWith("Phone profile: ")) return "Profil sonore : " + value.substring("Phone profile: ".length())
             .replace("Normal", "Normal").replace("Vibrate", "Vibreur").replace("Silent", "Silencieux");
         if (value.startsWith("Next Iqama after this Salat · ")) return "Prochaine iqama après cette prière · " + value.substring("Next Iqama after this Salat · ".length());
         if (value.startsWith("Geofence armed: ")) return value.replace("Geofence armed: ", "Zone géographique activée : ")
