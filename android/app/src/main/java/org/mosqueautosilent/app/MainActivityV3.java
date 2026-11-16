@@ -177,7 +177,9 @@ class MainActivityV3 extends AppCompatActivity {
         store = preferences;
         appLanguageCode = store.getString("app_language", store.getBoolean("arabic_language", false) ? "ar" : "en");
         if (!isKnownLanguage(appLanguageCode)) appLanguageCode = "en";
-        loadTranslationCache();
+        if (!isBuiltInLanguage(appLanguageCode)) loadTranslationCache();
+        selectedPage = clamp(store.getInt("selected_page", PAGE_HOME), PAGE_HOME, PAGE_MORE);
+        if (savedInstanceState != null) selectedPage = clamp(savedInstanceState.getInt("selected_page", selectedPage), PAGE_HOME, PAGE_MORE);
         loadMosqueProfiles();
         colors = new UiPalette(isNightMode());
         wifiScanner = new WifiScanner(this);
@@ -208,7 +210,7 @@ class MainActivityV3 extends AppCompatActivity {
         });
 
         buildUi();
-        if (!"en".equals(appLanguageCode) && !"ar".equals(appLanguageCode)) prepareTranslationModel();
+        if (!isBuiltInLanguage(appLanguageCode)) prepareTranslationModel();
         refreshScheduleRows();
         schedulePreIqamaScan();
         evaluateState();
@@ -246,16 +248,17 @@ class MainActivityV3 extends AppCompatActivity {
         TextView[] tabs = new TextView[labels.length];
         for (int i = 0; i < labels.length; i++) {
             final int page = i;
-            TextView tab = text(labels[i], 11, i == PAGE_HOME ? colors.onPrimary : colors.muted, true);
+            TextView tab = text(labels[i], 11, i == selectedPage ? colors.onPrimary : colors.muted, true);
             tab.setGravity(Gravity.CENTER);
-            tab.setBackground(roundRect(i == PAGE_HOME ? colors.primaryAction : colors.surface, dp(14),
-                i == PAGE_HOME ? colors.primaryAction : colors.surface));
+            tab.setBackground(roundRect(i == selectedPage ? colors.primaryAction : colors.surface, dp(14),
+                i == selectedPage ? colors.primaryAction : colors.surface));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(40), 1f);
             params.setMargins(dp(2), 0, dp(2), 0);
             navigation.addView(tab, params);
             tabs[i] = tab;
             tab.setOnClickListener(v -> {
                 selectedPage = page;
+                store.edit().putInt("selected_page", selectedPage).apply();
                 for (int j = 0; j < tabs.length; j++) {
                     tabs[j].setTextColor(j == page ? colors.onPrimary : colors.muted);
                     tabs[j].setBackground(roundRect(j == page ? colors.primaryAction : colors.surface, dp(14),
@@ -280,7 +283,7 @@ class MainActivityV3 extends AppCompatActivity {
             scroll.addView(body);
             content.addView(scroll, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
-            scroll.setVisibility(i == PAGE_HOME ? View.VISIBLE : View.GONE);
+            scroll.setVisibility(i == selectedPage ? View.VISIBLE : View.GONE);
             pageBodies[i] = body;
         }
         buildHomePage(pageBodies[PAGE_HOME]);
@@ -503,7 +506,7 @@ class MainActivityV3 extends AppCompatActivity {
             }
         }));
         language.addView(languageSelector, matchWrap());
-        translationInfo = text(L("English and Arabic are built in. Other languages use on-device ML Kit and download their model over Wi-Fi."),
+        translationInfo = text(L("English, Arabic and French are built in. Other languages use on-device ML Kit and download their model over Wi-Fi."),
             12, colors.muted, false);
         language.addView(translationInfo);
         page.addView(language);
@@ -835,23 +838,33 @@ class MainActivityV3 extends AppCompatActivity {
             scheduleRows.addView(text("Iqama times are not available for this date.", 13, colors.muted, false));
             return;
         }
+        LinearLayout columnHeaders = row();
+        columnHeaders.setPadding(dp(14), dp(2), dp(14), dp(5));
+        TextView iqamaHeader = text("Iqama", 13, colors.green, true);
+        TextView adhanHeader = text("Adhan", 13, colors.muted, true);
+        adhanHeader.setGravity(Gravity.END);
+        columnHeaders.addView(iqamaHeader, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        columnHeaders.addView(adhanHeader, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        scheduleRows.addView(columnHeaders);
         for (PrayerSchedule.Event event : events) {
-            LinearLayout scheduleCard = row();
-            scheduleCard.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout scheduleCard = column();
             scheduleCard.setPadding(dp(14), dp(11), dp(14), dp(11));
-            scheduleCard.setMinimumHeight(dp(82));
+            scheduleCard.setMinimumHeight(dp(88));
             scheduleCard.setBackground(roundRect(colors.surface, dp(17), colors.border));
             LinearLayout.LayoutParams outer = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             outer.bottomMargin = dp(7);
-            LinearLayout left = column();
-            left.addView(text(event.prayer, 14, colors.text, true));
-            left.addView(text("Adhan " + event.adhanText, 11, colors.muted, false));
-            scheduleCard.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            LinearLayout right = column();
-            right.setGravity(Gravity.END);
-            right.addView(text(timeOf(event.iqamaAt), 15, colors.green, true));
-            right.addView(text("Iqama " + event.offsetLabel(), 10, colors.muted, false));
-            scheduleCard.addView(right);
+            scheduleCard.addView(text(L(event.prayer), 14, colors.text, true));
+            addSpace(scheduleCard, 4);
+            LinearLayout times = row();
+            LinearLayout iqama = column();
+            iqama.addView(text(timeOf(event.iqamaAt), 17, colors.green, true));
+            iqama.addView(text("Adhan " + event.offsetLabel(), 11, colors.muted, false));
+            times.addView(iqama, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            LinearLayout adhan = column();
+            adhan.setGravity(Gravity.END);
+            adhan.addView(text(event.adhanText, 17, colors.text, true));
+            times.addView(adhan, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            scheduleCard.addView(times);
             scheduleRows.addView(scheduleCard, outer);
         }
     }
@@ -1459,6 +1472,10 @@ class MainActivityV3 extends AppCompatActivity {
         return false;
     }
 
+    private static boolean isBuiltInLanguage(String code) {
+        return "en".equals(code) || "ar".equals(code) || "fr".equals(code);
+    }
+
     private void loadTranslationCache() {
         try {
             JSONObject saved = new JSONObject(store.getString("translation_cache_" + appLanguageCode, "{}"));
@@ -1487,7 +1504,7 @@ class MainActivityV3 extends AppCompatActivity {
             .addOnFailureListener(error -> {
                 translationReady = false;
                 if (translationInfo != null) translationInfo.setText(L("Language model needs Wi-Fi. English remains available until the download succeeds."));
-                Toast.makeText(this, "Connect to Wi-Fi to download the language model. English remains available.", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, L("Connect to Wi-Fi to download the language model. English remains available."), Toast.LENGTH_LONG).show();
             });
     }
 
@@ -1525,9 +1542,10 @@ class MainActivityV3 extends AppCompatActivity {
             });
     }
 
-    /** Arabic uses the reviewed built-in phrasebook; other additional languages use on-device ML Kit. */
+    /** English, Arabic and French are bundled. Other additional languages use on-device ML Kit. */
     private String L(String value) {
         if (value == null || "en".equals(appLanguageCode)) return value;
+        if ("fr".equals(appLanguageCode)) return french(value);
         if (!"ar".equals(appLanguageCode)) {
             if (value.startsWith("Next Iqama · ")) {
                 String details = value.substring("Next Iqama · ".length());
@@ -1680,6 +1698,7 @@ class MainActivityV3 extends AppCompatActivity {
             case "Appearance, permissions and test controls.": return "المظهر والأذونات وعناصر الاختبار.";
             case "LANGUAGE": return "اللغة";
             case "App language": return "لغة التطبيق";
+            case "English, Arabic and French are built in. Other languages use on-device ML Kit and download their model over Wi-Fi.": return "الإنجليزية والعربية والفرنسية مدمجة في التطبيق. تستخدم اللغات الأخرى ترجمة ML Kit على الجهاز بعد تنزيل النموذج عبر واي فاي.";
             case "APPEARANCE": return "المظهر";
             case "Theme": return "السمة";
             case "Follow device": return "اتباع إعداد الجهاز";
@@ -1722,6 +1741,168 @@ class MainActivityV3 extends AppCompatActivity {
         }
     }
 
+    private String french(String value) {
+        if (value.startsWith("Next Iqama · ")) {
+            String details = value.substring("Next Iqama · ".length());
+            int separator = details.indexOf(" · ");
+            return "Prochaine iqama · " + (separator < 0 ? details : french(details.substring(0, separator)) + " · " + details.substring(separator + 3));
+        }
+        if (value.startsWith("Adhan +")) return value;
+        if (value.startsWith("Adhan ")) return "Adhan " + value.substring("Adhan ".length());
+        if (value.startsWith("Iqama +")) return "Iqama après " + value.substring("Iqama +".length());
+        if (value.startsWith("Restore · ") && value.endsWith(" minutes after Iqama")) {
+            String minutes = value.substring("Restore · ".length(), value.length() - " minutes after Iqama".length());
+            return "Restaurer · " + minutes + " min après l’iqama";
+        }
+        if (value.startsWith("Geofence radius · ")) return "Rayon de géorepérage · " + value.substring("Geofence radius · ".length());
+        if (value.startsWith("Current location · ")) return "Position actuelle · " + value.substring("Current location · ".length());
+        if (value.startsWith("Phone profile · ")) return "Profil sonore · " + value.substring("Phone profile · ".length())
+            .replace("Normal", "Normal").replace("Vibrate", "Vibreur").replace("Silent", "Silencieux");
+        if (value.startsWith("Next Iqama after this Salat · ")) return "Prochaine iqama après cette prière · " + value.substring("Next Iqama after this Salat · ".length());
+        if (value.startsWith("Geofence armed: ")) return value.replace("Geofence armed: ", "Zone géographique activée : ")
+            .replace("current test location", "position actuelle de test").replace("Tarfaya Mosque", "Mosquée de Tarfaya").replace(" m radius.", " m de rayon.");
+        if (value.startsWith("Could not refresh current location: ")) return value.replace("Could not refresh current location:", "Impossible d’actualiser la position actuelle :");
+        if (value.startsWith("Location lookup failed: ")) return value.replace("Location lookup failed:", "Échec de la recherche de position :");
+        if (value.startsWith("Location permission is missing: ")) return value.replace("Location permission is missing:", "Autorisation de localisation manquante :");
+        if (value.startsWith("Fresh scan · ")) return value.replace("Fresh scan · ", "Recherche récente · ").replace(" networks · ", " réseaux · ");
+        if (value.startsWith("Cached / throttled scan · ")) return value.replace("Cached / throttled scan · ", "Recherche en cache ou limitée · ").replace(" networks · ", " réseaux · ");
+        if (value.startsWith("Restored ")) return value.replace("Restored ", "Profil sonore restauré : ")
+            .replace("Normal", "Normal").replace("Vibrate", "Vibreur").replace("Silent", "Silencieux")
+            .replace(" · Imam ended Salat locally", " · prière terminée localement par l’imam")
+            .replace(" · Selected Wi-Fi left range", " · réseau Wi-Fi sélectionné hors de portée")
+            .replace(" · Geofence exited", " · sortie de la zone géographique")
+            .replace(" · Restore duration elapsed", " · délai de restauration écoulé");
+        if (value.equals("Fajer")) return "Fajr";
+        if (value.equals("Doher")) return "Dhohr";
+        if (value.equals("Aser")) return "Asr";
+        if (value.equals("Isha")) return "Icha";
+        switch (value) {
+            case "Home": return "Accueil";
+            case "Setup": return "Configuration";
+            case "Schedule": return "Horaires";
+            case "Imam": return "Imam";
+            case "More": return "Plus";
+            case "Tarfaya Mosque · Meknes": return "Mosquée de Tarfaya · Meknès";
+            case "PRAYER STATUS": return "ÉTAT DE LA PRIÈRE";
+            case "NEXT IQAMA": return "PROCHAINE IQAMA";
+            case "Prayer times are unavailable": return "Horaires de prière indisponibles";
+            case "Silence begins 30 seconds before Iqama": return "Le mode silencieux commence 30 secondes avant l’iqama";
+            case "STATUS KEY": return "LÉGENDE DES ÉTATS";
+            case "Ready": return "Prêt";
+            case "Waiting": return "En attente";
+            case "Not detected": return "Non détecté";
+            case "WI-FI": return "WI-FI";
+            case "GEOFENCE": return "ZONE GÉOGRAPHIQUE";
+            case "PRESENT": return "PRÉSENT";
+            case "NOT DETECTED": return "NON DÉTECTÉ";
+            case "NOT SET": return "NON CONFIGURÉ";
+            case "INSIDE": return "À L’INTÉRIEUR";
+            case "OUTSIDE": return "À L’EXTÉRIEUR";
+            case "COUNTDOWN TO IQAMA": return "COMPTE À REBOURS AVANT L’IQAMA";
+            case "NEXT IQAMA AFTER THIS SALAT": return "PROCHAINE IQAMA APRÈS CETTE PRIÈRE";
+            case "●  SALAT ACTIVE · SILENT": return "●  PRIÈRE EN COURS · MODE SILENCIEUX";
+            case "●  PRESENCE READY · WAITING FOR IQAMA": return "●  PRÉSENCE CONFIRMÉE · EN ATTENTE DE L’IQAMA";
+            case "●  WAITING FOR CONDITIONS": return "●  EN ATTENTE DES CONDITIONS";
+            case "Iqama schedule unavailable": return "Horaires d’iqama indisponibles";
+            case "Selected mosque network": return "Réseau Wi-Fi de la mosquée";
+            case "Choose the Wi-Fi and location conditions for this phone.": return "Configurez le Wi-Fi et la zone géographique de ce téléphone.";
+            case "MOSQUE": return "MOSQUÉE";
+            case "Selected mosque": return "Mosquée sélectionnée";
+            case "Add a mosque": return "Ajouter une mosquée";
+            case "Set geofence for selected mosque": return "Définir la zone de la mosquée sélectionnée";
+            case "Selected mosque location: Tarfaya, Meknes.": return "Emplacement de la mosquée sélectionnée : Tarfaya, Meknès.";
+            case "Selected mosque saved. Its prayer calendar is not configured yet.": return "Mosquée enregistrée. Ses horaires de prière ne sont pas encore configurés.";
+            case "WI-FI PRESENCE": return "PRÉSENCE WI-FI";
+            case "Refresh networks to choose an SSID": return "Actualisez les réseaux pour choisir un SSID";
+            case "No scan yet": return "Aucune recherche effectuée";
+            case "Refresh Wi-Fi networks": return "Actualiser les réseaux Wi-Fi";
+            case "LOCATION PRESENCE": return "PRÉSENCE GÉOGRAPHIQUE";
+            case "Location has not been refreshed": return "La position n’a pas été actualisée";
+            case "Refresh current location": return "Actualiser la position actuelle";
+            case "Refresh geofence": return "Actualiser la zone géographique";
+            case "Use current location as test-zone center": return "Utiliser la position actuelle comme centre de test";
+            case "Use Tarfaya Mosque geofence": return "Utiliser la zone de la mosquée de Tarfaya";
+            case "ACTIVATION RULE": return "RÈGLE D’ACTIVATION";
+            case "Selected Wi-Fi + inside the geofence + within the prayer window": return "Wi-Fi sélectionné + dans la zone + pendant la période de prière";
+            case "Both presence signals are required. This device scans Wi-Fi and refreshes its geofence from here.": return "Les deux critères de présence sont requis. Actualisez ici le Wi-Fi et la zone géographique.";
+            case "Iqama schedule": return "Horaires de l’iqama";
+            case "No Adhan calendar is configured for this mosque yet. Add its local prayer data before using automatic timing.": return "Aucun calendrier d’adhan n’est configuré pour cette mosquée. Ajoutez ses horaires locaux avant d’activer la programmation automatique.";
+            case "Times are calculated from the selected mosque's available prayer calendar.": return "Les horaires sont calculés à partir du calendrier disponible de la mosquée sélectionnée.";
+            case "Times are calculated from the Tarfaya Adhan calendar and your offsets.": return "Horaires calculés depuis le calendrier de l’adhan de Tarfaya et les décalages définis.";
+            case "TODAY · ADHAN → IQAMA": return "AUJOURD’HUI · ADHAN → IQAMA";
+            case "Iqama": return "Iqama";
+            case "Adhan": return "Adhan";
+            case "SILENT WINDOW": return "PÉRIODE SILENCIEUSE";
+            case "Start · 30 seconds before Iqama": return "Début · 30 secondes avant l’iqama";
+            case "Restore · 10 minutes after Iqama": return "Restaurer · 10 minutes après l’iqama";
+            case "Restore duration can be set from 1 to 30 minutes. Default: 10 minutes.": return "Durée de restauration réglable de 1 à 30 minutes. Valeur par défaut : 10 minutes.";
+            case "DEVICE TEST": return "TEST DE L’APPAREIL";
+            case "Test in 30 sec": return "Test dans 30 s";
+            case "Test in 90 sec": return "Test dans 90 s";
+            case "Imam dashboard": return "Tableau de l’imam";
+            case "Local controls and this phone's activity.": return "Commandes locales et activité de ce téléphone.";
+            case "No active local session": return "Aucune session locale active";
+            case "●  SALAT ACTIVE ON THIS PHONE": return "●  PRIÈRE EN COURS SUR CE TÉLÉPHONE";
+            case "●  NO ACTIVE LOCAL SESSION": return "●  AUCUNE SESSION LOCALE ACTIVE";
+            case "END SALAT": return "TERMINER LA PRIÈRE";
+            case "Restore this phone's previous sound profile.": return "Rétablir le profil sonore précédent de ce téléphone.";
+            case "End Salat · Restore Sound": return "Terminer la prière · Rétablir le son";
+            case "This action affects this phone only.": return "Cette action concerne uniquement ce téléphone.";
+            case "LOCAL COUNTERS · THIS PHONE": return "COMPTEURS LOCAUX · CE TÉLÉPHONE";
+            case "Silence sessions": return "Sessions silencieuses";
+            case "Imam releases": return "Fins de prière par l’imam";
+            case "ATTENDEES": return "FIDÈLES";
+            case "Connected attendees": return "Fidèles connectés";
+            case "Live attendee data is not connected. The mosque-wide roster and release require the authenticated backend and attendee clients.": return "La liste des fidèles n’est pas connectée. Le suivi et le contrôle à l’échelle de la mosquée nécessitent un serveur sécurisé et des applications connectées.";
+            case "Appearance, permissions and test controls.": return "Apparence, autorisations et commandes de test.";
+            case "LANGUAGE": return "LANGUE";
+            case "App language": return "Langue de l’application";
+            case "English, Arabic and French are built in. Other languages use on-device ML Kit and download their model over Wi-Fi.": return "L’anglais, l’arabe et le français sont intégrés. Les autres langues utilisent ML Kit sur l’appareil et téléchargent leur modèle via Wi-Fi.";
+            case "APPEARANCE": return "APPARENCE";
+            case "Theme": return "Thème";
+            case "Follow device": return "Selon l’appareil";
+            case "Light": return "Clair";
+            case "Dark": return "Sombre";
+            case "TEST OVERRIDES": return "OPTIONS DE TEST";
+            case "Simulate Wi-Fi presence": return "Simuler la présence du Wi-Fi";
+            case "Simulate inside geofence": return "Simuler la présence dans la zone";
+            case "Overrides are for local testing and do not represent mosque-wide attendance.": return "Ces options servent aux tests locaux et ne représentent pas la présence dans toute la mosquée.";
+            case "DEVICE ACCESS": return "AUTORISATIONS DE L’APPAREIL";
+            case "Sound & Do Not Disturb access": return "Accès au son et au mode Ne pas déranger";
+            case "Review app permissions": return "Vérifier les autorisations de l’application";
+            case "Iqama times are not available for this date.": return "Les horaires d’iqama ne sont pas disponibles pour cette date.";
+            case "Turn on Android Location, then refresh again.": return "Activez la localisation Android, puis actualisez.";
+            case "Scanning visible networks…": return "Recherche des réseaux visibles…";
+            case "No networks found": return "Aucun réseau trouvé";
+            case "Select a Wi-Fi network": return "Choisir un réseau Wi-Fi";
+            case "Wi-Fi list refreshed": return "Liste Wi-Fi actualisée";
+            case "Refreshing current location…": return "Actualisation de la position…";
+            case "Location and geofence refreshed": return "Position et zone actualisées";
+            case "Grant precise location to refresh the current position.": return "Autorisez la localisation précise pour actualiser la position.";
+            case "Current location is unavailable. Turn on Android Location and refresh again.": return "Position actuelle indisponible. Activez la localisation Android et actualisez.";
+            case "Location permission is missing.": return "Autorisation de localisation manquante.";
+            case "Grant precise location first.": return "Autorisez d’abord la localisation précise.";
+            case "Allow background location": return "Autoriser la localisation en arrière-plan";
+            case "Open app settings": return "Ouvrir les paramètres de l’application";
+            case "Cancel": return "Annuler";
+            case "Open Sound access to enable automatic silence.": return "Autorisez l’accès au son pour activer le mode silencieux automatique.";
+            case "Silent mode could not be applied on this phone.": return "Impossible d’activer le mode silencieux sur ce téléphone.";
+            case "Silent mode on · previous profile saved": return "Mode silencieux activé · profil précédent enregistré";
+            case "Restore pending · Sound access is required.": return "Restauration en attente · autorisation d’accès au son requise.";
+            case "Search mosque name and city": return "Rechercher le nom et la ville de la mosquée";
+            case "Enter a mosque name and city.": return "Saisissez le nom et la ville de la mosquée.";
+            case "Search and choose the correct mosque location first.": return "Recherchez et sélectionnez d’abord l’emplacement correct de la mosquée.";
+            case "Connect to Wi-Fi to download the language model. English remains available.": return "Connectez-vous au Wi-Fi pour télécharger le modèle linguistique. L’anglais reste disponible.";
+            case "Use my location": return "Utiliser ma position";
+            case "Save mosque": return "Enregistrer la mosquée";
+            case "Find mosque": return "Rechercher une mosquée";
+            case "Nearby suggestions": return "Suggestions à proximité";
+            case "No matches": return "Aucun résultat";
+            case "Mosque name": return "Nom de la mosquée";
+            default: return value;
+        }
+    }
+
     private int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }
 
     private boolean isNightMode() {
@@ -1739,6 +1920,11 @@ class MainActivityV3 extends AppCompatActivity {
         long seconds = total % 60L;
         return hours > 0 ? String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds) :
             String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds);
+    }
+
+    @Override protected void onSaveInstanceState(Bundle outState) {
+        outState.putInt("selected_page", selectedPage);
+        super.onSaveInstanceState(outState);
     }
 
     @Override protected void onResume() {

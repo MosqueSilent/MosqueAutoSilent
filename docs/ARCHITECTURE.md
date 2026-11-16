@@ -20,7 +20,7 @@ The local selector contains Tarfaya plus user-added mosque profiles with names a
 
 System-bar and display-cutout insets are applied to the root view. Scroll views include bottom space and allow content to clear the navigation bar. Text views keep font padding, larger edge padding and up to two lines on buttons to reduce Arabic clipping.
 
-The More page offers English and Arabic in a native dropdown with flag markers. Arabic uses RTL layout and the reviewed built-in phrasebook. Cloud/dynamic translation is not connected. The subtle original vector wallpaper draws horseshoe arches, column lines, zellij diamonds and restrained carpet colors based on the supplied mosque photo. Light and dark variants keep the pattern low contrast.
+The More page offers English, Arabic and French as built-in languages in a native dropdown with flag markers. Arabic uses RTL layout and the reviewed built-in phrasebook; French strings are bundled in the app. Other selected languages can use on-device ML Kit translation after their models are downloaded. The subtle original vector wallpaper draws horseshoe arches, column lines, zellij diamonds and restrained carpet colors based on the supplied mosque photo. Light and dark variants keep the pattern low contrast.
 
 ## Imam boundary
 
