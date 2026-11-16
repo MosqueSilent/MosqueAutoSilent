@@ -1,4 +1,4 @@
-# Mosque Auto-Silent v0.4 architecture
+# Mosque Auto-Silent v0.5 architecture
 
 ## Activation and timing
 
@@ -8,17 +8,19 @@ Tarfaya uses the bundled 2026 Adhan calendar and offsets: Fajer +23 minutes, Doh
 
 ## Mosque profiles
 
-The local selector contains Tarfaya plus user-added mosque profiles with names and coordinates. Only Tarfaya has a bundled prayer calendar. For another mosque, the schedule page reports missing calendar data and the automatic schedule path returns no event. The local test-Iqama control remains available for setup checks. Profiles and the selected mosque are stored on-device. No mosque directory or MAWAQIT service is queried.
+The local selector contains Tarfaya plus user-added mosque profiles with names and coordinates. Only Tarfaya has a bundled prayer calendar. Other profiles show missing calendar data and have no automatic schedule event. The local test-Iqama control remains available for setup checks. Profiles and the selected mosque are stored on-device. No mosque directory or MAWAQIT service is queried.
 
-## Presence
+## Presence and refresh
 
-- The operator chooses the target SSID. Android may throttle scans and return cached results.
-- The selected mosque geofence is configured from its stored coordinates. Refreshing current location reads and displays a position without changing that geofence.
+- The operator chooses the target SSID. Android may throttle scans and return cached results. Each visible SSID shows an estimated percentage and RSSI dBm from its strongest scan result.
+- Home provides an icon to rescan Wi-Fi and an icon to re-register the configured geofence. The geofence icon uses the current-location test zone if selected, or the selected mosque's coordinates otherwise.
 - Changing mosque clears the old inside-geofence state and restores an active local session; the new mosque geofence must be configured.
 
-## Language and appearance
+## Layout and appearance
 
-The More page offers English and Arabic. Arabic uses a right-to-left layout and a built-in phrasebook for the prototype UI. Light/dark/system appearance is available. The background is an original, low-contrast geometric zellij-inspired vector in both themes.
+System-bar and display-cutout insets are applied to the root view. Scroll views include bottom space and allow content to clear the navigation bar. Text views keep font padding, larger edge padding and up to two lines on buttons to reduce Arabic clipping.
+
+The More page offers English and Arabic in a native dropdown with flag markers. Arabic uses RTL layout and the reviewed built-in phrasebook. Cloud/dynamic translation is not connected. The subtle original vector wallpaper draws horseshoe arches, column lines, zellij diamonds and restrained carpet colors based on the supplied mosque photo. Light and dark variants keep the pattern low contrast.
 
 ## Imam boundary
 

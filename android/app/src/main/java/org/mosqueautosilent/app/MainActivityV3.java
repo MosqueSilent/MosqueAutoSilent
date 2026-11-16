@@ -24,6 +24,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -39,6 +40,10 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -67,6 +72,7 @@ class MainActivityV3 extends AppCompatActivity {
     private UiPalette colors;
 
     private final List<String> ssids = new ArrayList<>();
+    private final List<WifiScanner.Network> wifiNetworks = new ArrayList<>();
     private Spinner ssidSpinner;
     private TextView wifiScanInfo;
     private TextView locationInfo;
@@ -170,14 +176,14 @@ class MainActivityV3 extends AppCompatActivity {
         ImageView logo = new ImageView(this);
         logo.setImageResource(org.mosqueautosilent.app.R.drawable.ic_brand_mosque);
         LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(48), dp(48));
-        logoParams.rightMargin = dp(12);
+        logoParams.setMarginEnd(dp(12));
         header.addView(logo, logoParams);
         LinearLayout brand = column();
         brand.addView(text("Mosque Auto-Silent", 19, colors.text, true));
         mosqueHeader = text(selectedMosque.name + (selectedMosque.id.equals("tarfaya") ? " · Meknes" : ""), 12, colors.muted, false);
         brand.addView(mosqueHeader);
         header.addView(brand, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView version = text("0.4", 11, colors.green, true);
+        TextView version = text("0.5", 11, colors.green, true);
         version.setGravity(Gravity.CENTER);
         version.setBackground(roundRect(colors.goodSoft, dp(14), colors.goodSoft));
         header.addView(version, new LinearLayout.LayoutParams(dp(44), dp(30)));
@@ -220,7 +226,8 @@ class MainActivityV3 extends AppCompatActivity {
             ScrollView scroll = new ScrollView(this);
             scroll.setFillViewport(true);
             LinearLayout body = column();
-            body.setPadding(dp(2), dp(4), dp(2), dp(26));
+            body.setPadding(dp(7), dp(4), dp(7), dp(36));
+            scroll.setClipToPadding(false);
             scroll.addView(body);
             content.addView(scroll, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
@@ -233,6 +240,19 @@ class MainActivityV3 extends AppCompatActivity {
         buildImamPage(pageBodies[PAGE_IMAM]);
         buildMorePage(pageBodies[PAGE_MORE]);
         setContentView(shell);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        androidx.core.view.WindowInsetsControllerCompat bars = new androidx.core.view.WindowInsetsControllerCompat(getWindow(), shell);
+        bars.setAppearanceLightStatusBars(!isNightMode());
+        bars.setAppearanceLightNavigationBars(!isNightMode());
+        ViewCompat.setOnApplyWindowInsetsListener(shell, (view, windowInsets) -> {
+            Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            view.setPadding(dp(18) + insets.left, dp(12) + insets.top,
+                dp(18) + insets.right, dp(8) + insets.bottom);
+            return windowInsets;
+        });
+        ViewCompat.requestApplyInsets(shell);
     }
 
     private void buildHomePage(LinearLayout page) {
@@ -253,12 +273,12 @@ class MainActivityV3 extends AppCompatActivity {
 
         addSpace(page, 13);
         LinearLayout statusRow = row();
-        homeWifiStatus = signalCard("WI-FI", "Not detected", "Select a network in Setup", colors.waiting, colors.waitingSoft);
-        homeGeoStatus = signalCard("GEOFENCE", "Outside", "Set a location in Setup", colors.waiting, colors.waitingSoft);
-        statusRow.addView(homeWifiStatus, new LinearLayout.LayoutParams(0, dp(112), 1f));
+        FrameLayout wifiCard = signalCard("WI-FI", "Not detected", "Select a network in Setup", colors.waiting, colors.waitingSoft, true);
+        FrameLayout geoCard = signalCard("GEOFENCE", "Outside", "Set a location in Setup", colors.waiting, colors.waitingSoft, false);
+        statusRow.addView(wifiCard, new LinearLayout.LayoutParams(0, dp(124), 1f));
         View gap = new View(this);
         statusRow.addView(gap, new LinearLayout.LayoutParams(dp(10), 1));
-        statusRow.addView(homeGeoStatus, new LinearLayout.LayoutParams(0, dp(112), 1f));
+        statusRow.addView(geoCard, new LinearLayout.LayoutParams(0, dp(124), 1f));
         page.addView(statusRow);
 
         addSpace(page, 10);
@@ -422,7 +442,7 @@ class MainActivityV3 extends AppCompatActivity {
         LinearLayout language = card();
         language.addView(text("App language", 14, colors.text, true));
         Spinner languageSpinner = new Spinner(this);
-        String[] languageOptions = {L("English"), L("العربية")};
+        String[] languageOptions = {L("🇬🇧 English"), L("🇲🇦 العربية")};
         ArrayAdapter<String> languageAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, languageOptions);
         languageAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         languageSpinner.setAdapter(languageAdapter);
@@ -700,8 +720,12 @@ class MainActivityV3 extends AppCompatActivity {
     private void updateHome(boolean wifi, boolean inside, String prayer, long targetAt, long now) {
         if (homeWifiStatus == null) return;
         boolean wifiConfigured = manualWifiOverride || !selectedSsid.isEmpty();
+        WifiScanner.Network selectedNetwork = null;
+        for (WifiScanner.Network network : wifiNetworks) if (network.ssid.equals(selectedSsid)) selectedNetwork = network;
+        String strength = selectedNetwork == null ? "" : "\n" + L("Signal") + " " + selectedNetwork.signalPercent +
+            "% · " + selectedNetwork.rssiDbm + " dBm";
         homeWifiStatus.setText(L("WI-FI") + "\n" + L(wifi ? "PRESENT" : wifiConfigured ? "NOT DETECTED" : "NOT SET") +
-            (selectedSsid.isEmpty() ? "" : "\n" + selectedSsid));
+            (selectedSsid.isEmpty() ? "" : "\n" + selectedSsid) + strength);
         homeWifiStatus.setTextColor(wifi ? colors.good : wifiConfigured ? colors.bad : colors.waiting);
         homeWifiStatus.setBackground(roundRect(wifi ? colors.goodSoft : wifiConfigured ? colors.badSoft : colors.waitingSoft,
             dp(19), wifi ? colors.goodSoft : wifiConfigured ? colors.badSoft : colors.waitingSoft));
@@ -820,12 +844,15 @@ class MainActivityV3 extends AppCompatActivity {
         }
         if (wifiScanInfo != null) wifiScanInfo.setText(L("Scanning visible networks…"));
         wifiScanner.requestScan((found, fresh) -> runOnUiThread(() -> {
+            wifiNetworks.clear();
+            wifiNetworks.addAll(found);
             ssids.clear();
-            ssids.addAll(found);
+            for (WifiScanner.Network network : found) ssids.add(network.ssid);
             if (fresh) lastFreshScan = System.currentTimeMillis();
             List<String> choices = new ArrayList<>();
             choices.add(L(ssids.isEmpty() ? "No networks found" : "Select a Wi-Fi network"));
-            choices.addAll(ssids);
+            for (WifiScanner.Network network : found) choices.add(String.format(Locale.getDefault(),
+                "%s · %d%% · %d dBm", network.ssid, network.signalPercent, network.rssiDbm));
             ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, choices);
             adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
             ssidSpinner.setAdapter(adapter);
@@ -834,7 +861,8 @@ class MainActivityV3 extends AppCompatActivity {
             ssidSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                     if (position <= 0) return;
-                    selectedSsid = String.valueOf(parent.getItemAtPosition(position));
+                    if (position - 1 >= ssids.size()) return;
+                    selectedSsid = ssids.get(position - 1);
                     store.edit().putString("selected_ssid", selectedSsid).apply();
                     evaluateState();
                 }
@@ -850,6 +878,7 @@ class MainActivityV3 extends AppCompatActivity {
     private void ensureLocationForGeofence() {
         if (!ensureLocationPermissions()) return;
         geofenceManager.armAtCurrentLocation(geofenceRadiusMetres, (ok, message) -> runOnUiThread(() -> {
+            if (ok) store.edit().putString("geofence_mode", "current").apply();
             locationInfo.setText(L(message));
             Toast.makeText(this, L(ok ? "Location and geofence refreshed" : message), Toast.LENGTH_LONG).show();
         }));
@@ -871,6 +900,7 @@ class MainActivityV3 extends AppCompatActivity {
         if (!ensureLocationPermissions()) return;
         geofenceManager.armAtCoordinates(selectedMosque.latitude, selectedMosque.longitude, geofenceRadiusMetres,
             selectedMosque.name, (ok, message) -> runOnUiThread(() -> {
+                if (ok) store.edit().putString("geofence_mode", "mosque").putString("geofence_mosque_id", selectedMosque.id).apply();
                 locationInfo.setText(L(message));
                 Toast.makeText(this, L(message), Toast.LENGTH_LONG).show();
             }));
@@ -933,12 +963,36 @@ class MainActivityV3 extends AppCompatActivity {
         addSpace(page, 10);
     }
 
-    private TextView signalCard(String title, String status, String detail, int tint, int background) {
-        TextView view = text(title + "\n" + status + "\n" + detail, 11, tint, true);
-        view.setGravity(Gravity.CENTER_VERTICAL);
-        view.setPadding(dp(14), dp(11), dp(10), dp(11));
-        view.setBackground(roundRect(background, dp(19), background));
-        return view;
+    private FrameLayout signalCard(String title, String status, String detail, int tint, int background, boolean wifi) {
+        FrameLayout card = new FrameLayout(this);
+        TextView label = text(title + "\n" + status + "\n" + detail, 11, tint, true);
+        label.setGravity(Gravity.CENTER_VERTICAL);
+        label.setPaddingRelative(dp(14), dp(11), dp(44), dp(11));
+        label.setBackground(roundRect(background, dp(19), background));
+        if (wifi) homeWifiStatus = label; else homeGeoStatus = label;
+        card.addView(label, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        ImageButton refresh = new ImageButton(this);
+        refresh.setImageResource(R.drawable.ic_refresh);
+        refresh.setColorFilter(colors.primaryAction);
+        refresh.setContentDescription(L(wifi ? "Refresh Wi-Fi networks" : "Refresh geofence"));
+        refresh.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        refresh.setPadding(dp(7), dp(7), dp(7), dp(7));
+        refresh.setBackground(roundRect(background, dp(11), background));
+        FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.END | Gravity.TOP);
+        iconParams.topMargin = dp(7);
+        iconParams.setMarginEnd(dp(7));
+        card.addView(refresh, iconParams);
+        refresh.setOnClickListener(v -> {
+            if (wifi) ensureWifiPermissionsAndScan();
+            else refreshGeofenceFromHome();
+        });
+        return card;
+    }
+
+    private void refreshGeofenceFromHome() {
+        if ("current".equals(store.getString("geofence_mode", "mosque"))) ensureLocationForGeofence();
+        else ensureSelectedMosqueGeofence();
     }
 
     private TextView statusPill(String value, int foreground, int background) {
@@ -987,10 +1041,15 @@ class MainActivityV3 extends AppCompatActivity {
         button.setAllCaps(false);
         button.setTextSize(13);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setIncludeFontPadding(true);
+        button.setLineSpacing(dp(2), 1.0f);
+        button.setSingleLine(false);
+        button.setMaxLines(2);
+        button.setGravity(Gravity.CENTER);
         button.setTextColor(primary ? colors.onPrimary : colors.primaryAction);
         button.setBackground(roundRect(primary ? colors.primaryAction : colors.buttonSoft, dp(15),
             primary ? colors.primaryAction : colors.buttonSoft));
-        button.setPadding(dp(12), 0, dp(12), 0);
+        button.setPaddingRelative(dp(12), dp(5), dp(12), dp(5));
         button.setMinHeight(dp(48));
         return button;
     }
@@ -1002,7 +1061,9 @@ class MainActivityV3 extends AppCompatActivity {
         view.setTextColor(color);
         if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         view.setGravity(Gravity.CENTER_VERTICAL);
-        view.setPadding(0, dp(4), 0, dp(4));
+        view.setIncludeFontPadding(true);
+        view.setLineSpacing(dp(2), 1.0f);
+        view.setPadding(dp(3), dp(6), dp(3), dp(6));
         return view;
     }
 
@@ -1088,6 +1149,8 @@ class MainActivityV3 extends AppCompatActivity {
             return (fresh ? "بحث حديث · " : "بحث محفوظ أو مقيّد · ") + details;
         }
         switch (value) {
+            case "🇲🇦 العربية": return "🇲🇦 العربية";
+            case "🇬🇧 English": return "🇬🇧 English";
             case "العربية": return "العربية";
             case "English": return "English";
             case "Home": return "الرئيسية";
@@ -1142,6 +1205,8 @@ class MainActivityV3 extends AppCompatActivity {
             case "Refresh networks to choose an SSID": return "حدّث الشبكات لاختيار شبكة واي فاي";
             case "No scan yet": return "لم يتم البحث بعد";
             case "Refresh Wi-Fi networks": return "تحديث شبكات واي فاي";
+            case "Refresh geofence": return "تحديث النطاق الجغرافي";
+            case "Signal": return "الإشارة";
             case "LOCATION PRESENCE": return "التواجد بالموقع";
             case "Location has not been refreshed": return "لم يتم تحديث الموقع بعد";
             case "Refresh current location": return "تحديث الموقع الحالي";

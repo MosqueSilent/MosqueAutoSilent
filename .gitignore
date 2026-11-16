@@ -17,3 +17,4 @@ Thumbs.db
 
 # Retrieved CI artifact bundle
 /artifacts/
+/.codex-attachments/

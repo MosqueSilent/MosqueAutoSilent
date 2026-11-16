@@ -1,6 +1,6 @@
 # Mosque Auto-Silent
 
-## Android prototype v0.4.0
+## Android prototype v0.5.0
 
 Mosque Auto-Silent helps an attendee's Android phone silence its ringer during prayer. Activation requires both a selected Wi-Fi SSID and geofence presence. The app saves and restores the phone's previous ringer profile.
 
@@ -18,9 +18,15 @@ The currently supported Tarfaya calendar is bundled for 2026. Iqama is calculate
 
 Silence starts 30 seconds before Iqama. Restore defaults to 10 minutes after Iqama and is configurable from 1 to 30 minutes. The app does not use Tarfaya's calendar for another selected mosque.
 
-### Mosque and language selection
+### Mosque, language and appearance
 
-Setup lets the operator select Tarfaya or add a local mosque profile with a name and coordinates. Tarfaya is the only profile with prayer calendar data; other profiles clearly report that their calendar is missing and scheduled activation stays unavailable until their local timings are added. No MAWAQIT API is connected. The app includes English and Arabic UI options, RTL layout in Arabic, and a faint original zellij-inspired geometric background for both themes.
+Setup lets the operator select Tarfaya or add local mosque profiles with names and coordinates. Tarfaya is the only profile with prayer calendar data; other profiles report that their calendar is missing and scheduled activation stays unavailable until their local timings are added. No MAWAQIT API is connected.
+
+The More page has a native language dropdown with country flags for English and Arabic; Arabic uses RTL layout and a built-in phrasebook. Dynamic translation is not enabled. The app's faint Moroccan-style vector background is inspired by the submitted mosque's horseshoe arches, tiled columns, carved details and carpet tones. It is an original design rather than a faded photo.
+
+### Home signals and refresh
+
+Home has separate refresh icons for Wi-Fi scanning and the configured geofence. Wi-Fi results show estimated signal strength as a percentage and RSSI in dBm. The app applies system-bar insets and scroll padding so content clears the status/navigation bars and the last rows remain reachable.
 
 ### Imam controls and boundaries
 
@@ -54,7 +60,7 @@ Expected build output: `android/app/build/outputs/apk/debug/app-debug.apk`. The 
 
 ## Prototype limits
 
-- Wi-Fi scans can be throttled or cached by Android. Cached results do not establish that a selected network disappeared.
+- Wi-Fi scans can be throttled or cached by Android. Cached results do not establish that a selected network disappeared; the displayed percentage and dBm are estimates from the scan result.
 - Background geofencing requires precise location and, on Android 10+, background location permission. Confirm the mosque geofence center/radius on site.
 - Notification Policy Access is required for ringer changes. If access is revoked during restoration, the app leaves the saved restore pending.
 - The only prayer calendar is Tarfaya's 2026 Adhan calendar. Other local mosque profiles need their own schedule data before automatic timing is available. This is not a live feed.
