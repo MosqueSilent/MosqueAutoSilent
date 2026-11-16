@@ -34,7 +34,7 @@ The Imam tab has a local End Salat action and on-device counters. Connected atte
 
 ## Build the Android debug APK
 
-Requirements: JDK 17 and Android SDK Platform 36. Gradle 8.11.1 is pinned by the wrapper; the Android Gradle Plugin version is 8.10.1.
+Requirements: JDK 17 and Android SDK Platform 36. Gradle 8.11.1 is pinned by the wrapper; Android Gradle Plugin is 8.10.1.
 
 Windows PowerShell:
 
@@ -50,7 +50,7 @@ cd android
 ./gradlew assembleDebug
 ```
 
-Expected build output: `android/app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions runs the browser smoke test and Android unit tests, builds the APK, and uploads `mosque-auto-silent-debug-apk`. See [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) for verified build status and artifact details.
+Expected build output: `android/app/build/outputs/apk/debug/app-debug.apk`. The latest verified CI APK is downloaded at `artifacts/app-debug.apk`; see [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) for its checksum and run details. GitHub Actions runs the browser smoke test and Android unit tests, builds the APK, and uploads `mosque-auto-silent-debug-apk`.
 
 ## Prototype limits
 
