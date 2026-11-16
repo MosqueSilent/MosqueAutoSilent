@@ -16,11 +16,13 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.Gravity;
+import android.text.InputType;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -37,6 +39,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.content.ContextCompat;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
@@ -85,6 +89,11 @@ class MainActivityV3 extends AppCompatActivity {
     private TextView durationText;
     private SwitchCompat demoWifiSwitch;
     private SwitchCompat demoGeoSwitch;
+    private boolean arabicLanguage;
+    private Spinner mosqueSpinner;
+    private TextView mosqueHeader;
+    private final List<MosqueProfile> mosqueProfiles = new ArrayList<>();
+    private MosqueProfile selectedMosque;
 
     private String selectedSsid = "";
     private boolean active;
@@ -118,6 +127,8 @@ class MainActivityV3 extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         store = preferences;
+        arabicLanguage = store.getBoolean("arabic_language", false);
+        loadMosqueProfiles();
         colors = new UiPalette(isNightMode());
         wifiScanner = new WifiScanner(this);
         geofenceManager = new GeofenceManager(this);
@@ -151,7 +162,8 @@ class MainActivityV3 extends AppCompatActivity {
 
     private void buildUi() {
         LinearLayout shell = column();
-        shell.setBackgroundColor(colors.background);
+        shell.setBackgroundResource(R.drawable.bg_zellij);
+        shell.setLayoutDirection(arabicLanguage ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR);
         shell.setPadding(dp(18), dp(12), dp(18), dp(8));
 
         LinearLayout header = row();
@@ -162,9 +174,10 @@ class MainActivityV3 extends AppCompatActivity {
         header.addView(logo, logoParams);
         LinearLayout brand = column();
         brand.addView(text("Mosque Auto-Silent", 19, colors.text, true));
-        brand.addView(text("Tarfaya Mosque · Meknes", 12, colors.muted, false));
+        mosqueHeader = text(selectedMosque.name + (selectedMosque.id.equals("tarfaya") ? " · Meknes" : ""), 12, colors.muted, false);
+        brand.addView(mosqueHeader);
         header.addView(brand, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView version = text("0.3", 11, colors.green, true);
+        TextView version = text("0.4", 11, colors.green, true);
         version.setGravity(Gravity.CENTER);
         version.setBackground(roundRect(colors.goodSoft, dp(14), colors.goodSoft));
         header.addView(version, new LinearLayout.LayoutParams(dp(44), dp(30)));
@@ -261,12 +274,23 @@ class MainActivityV3 extends AppCompatActivity {
 
     private void buildSetupPage(LinearLayout page) {
         addPageTitle(page, "Setup", "Choose the Wi-Fi and location conditions for this phone.");
+        addSection(page, "MOSQUE");
+        LinearLayout mosqueCard = card();
+        mosqueCard.addView(text("Selected mosque", 14, colors.text, true));
+        mosqueSpinner = new Spinner(this);
+        refreshMosqueChoices();
+        mosqueCard.addView(mosqueSpinner);
+        Button addMosque = button("Add a mosque", false);
+        mosqueCard.addView(addMosque, matchWrap());
+        addMosque.setOnClickListener(v -> showAddMosqueDialog());
+        page.addView(mosqueCard);
+
         addSection(page, "WI-FI PRESENCE");
         LinearLayout wifiCard = card();
         wifiCard.addView(text("Selected mosque network", 14, colors.text, true));
         ssidSpinner = new Spinner(this);
         ArrayAdapter<String> ssidAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item,
-            new ArrayList<>(java.util.Collections.singletonList("Refresh networks to choose an SSID")));
+            new ArrayList<>(java.util.Collections.singletonList(L("Refresh networks to choose an SSID"))));
         ssidAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         ssidSpinner.setAdapter(ssidAdapter);
         wifiCard.addView(ssidSpinner);
@@ -290,7 +314,7 @@ class MainActivityV3 extends AppCompatActivity {
         radius.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
                 geofenceRadiusMetres = progress + 50;
-                radiusLabel.setText("Geofence radius · " + geofenceRadiusMetres + " m");
+                radiusLabel.setText(L("Geofence radius · " + geofenceRadiusMetres + " m"));
                 store.edit().putInt("geofence_radius", geofenceRadiusMetres).apply();
             }
             @Override public void onStartTrackingTouch(SeekBar bar) {}
@@ -302,9 +326,9 @@ class MainActivityV3 extends AppCompatActivity {
         Button currentCenter = button("Use current location as test-zone center", false);
         locationCard.addView(currentCenter, matchWrap());
         currentCenter.setOnClickListener(v -> ensureLocationForGeofence());
-        Button tarfaya = button("Use Tarfaya Mosque geofence", false);
-        locationCard.addView(tarfaya, matchWrap());
-        tarfaya.setOnClickListener(v -> ensureLocationForTarfayaGeofence());
+        Button selectedMosqueZone = button("Set geofence for selected mosque", false);
+        locationCard.addView(selectedMosqueZone, matchWrap());
+        selectedMosqueZone.setOnClickListener(v -> ensureSelectedMosqueGeofence());
         page.addView(locationCard);
 
         addSection(page, "ACTIVATION RULE");
@@ -313,7 +337,7 @@ class MainActivityV3 extends AppCompatActivity {
     }
 
     private void buildSchedulePage(LinearLayout page) {
-        addPageTitle(page, "Iqama schedule", "Times are calculated from the Tarfaya Adhan calendar and your offsets.");
+        addPageTitle(page, "Iqama schedule", "Times are calculated from the selected mosque's available prayer calendar.");
         addSection(page, "TODAY · ADHAN → IQAMA");
         scheduleRows = column();
         page.addView(scheduleRows);
@@ -330,7 +354,7 @@ class MainActivityV3 extends AppCompatActivity {
         durationSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 durationMinutes = progress + 1;
-                durationText.setText("Restore · " + durationMinutes + " minutes after Iqama");
+                durationText.setText(L("Restore · " + durationMinutes + " minutes after Iqama"));
                 store.edit().putInt("duration_minutes", durationMinutes).apply();
                 schedulePreIqamaScan();
                 evaluateState();
@@ -394,11 +418,33 @@ class MainActivityV3 extends AppCompatActivity {
 
     private void buildMorePage(LinearLayout page) {
         addPageTitle(page, "More", "Appearance, permissions and test controls.");
+        addSection(page, "LANGUAGE");
+        LinearLayout language = card();
+        language.addView(text("App language", 14, colors.text, true));
+        Spinner languageSpinner = new Spinner(this);
+        String[] languageOptions = {L("English"), L("العربية")};
+        ArrayAdapter<String> languageAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, languageOptions);
+        languageAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        languageSpinner.setAdapter(languageAdapter);
+        languageSpinner.setSelection(arabicLanguage ? 1 : 0);
+        languageSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                boolean useArabic = position == 1;
+                if (useArabic != arabicLanguage) {
+                    store.edit().putBoolean("arabic_language", useArabic).apply();
+                    recreate();
+                }
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        language.addView(languageSpinner);
+        page.addView(language);
+
         addSection(page, "APPEARANCE");
         LinearLayout appearance = card();
         appearance.addView(text("Theme", 14, colors.text, true));
         Spinner themeSpinner = new Spinner(this);
-        String[] themes = {"Follow device", "Light", "Dark"};
+        String[] themes = {L("Follow device"), L("Light"), L("Dark")};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, themes);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         themeSpinner.setAdapter(adapter);
@@ -421,7 +467,7 @@ class MainActivityV3 extends AppCompatActivity {
         addSection(page, "TEST OVERRIDES");
         LinearLayout overrides = card();
         demoWifiSwitch = new SwitchCompat(this);
-        demoWifiSwitch.setText("Simulate Wi-Fi presence");
+        demoWifiSwitch.setText(L("Simulate Wi-Fi presence"));
         demoWifiSwitch.setTextColor(colors.text);
         demoWifiSwitch.setChecked(false);
         demoWifiSwitch.setOnCheckedChangeListener((button, checked) -> {
@@ -430,7 +476,7 @@ class MainActivityV3 extends AppCompatActivity {
         });
         overrides.addView(demoWifiSwitch);
         demoGeoSwitch = new SwitchCompat(this);
-        demoGeoSwitch.setText("Simulate inside geofence");
+        demoGeoSwitch.setText(L("Simulate inside geofence"));
         demoGeoSwitch.setTextColor(colors.text);
         demoGeoSwitch.setChecked(demoInside);
         demoGeoSwitch.setOnCheckedChangeListener((button, checked) -> {
@@ -454,11 +500,143 @@ class MainActivityV3 extends AppCompatActivity {
         page.addView(access);
     }
 
+    private void loadMosqueProfiles() {
+        mosqueProfiles.clear();
+        mosqueProfiles.add(new MosqueProfile("tarfaya", "Tarfaya Mosque", 33.90066, -5.54761, true));
+        try {
+            JSONArray saved = new JSONArray(store.getString("custom_mosques", "[]"));
+            for (int i = 0; i < saved.length(); i++) {
+                JSONObject item = saved.getJSONObject(i);
+                mosqueProfiles.add(new MosqueProfile(item.getString("id"), item.getString("name"),
+                    item.getDouble("latitude"), item.getDouble("longitude"), false));
+            }
+        } catch (Exception ignored) {
+            // A malformed local directory falls back to the known Tarfaya profile.
+        }
+        String selectedId = store.getString("selected_mosque_id", "tarfaya");
+        selectedMosque = mosqueProfiles.get(0);
+        for (MosqueProfile profile : mosqueProfiles) if (profile.id.equals(selectedId)) selectedMosque = profile;
+    }
+
+    private void refreshMosqueChoices() {
+        if (mosqueSpinner == null) return;
+        List<String> names = new ArrayList<>();
+        int selectedIndex = 0;
+        for (int i = 0; i < mosqueProfiles.size(); i++) {
+            MosqueProfile profile = mosqueProfiles.get(i);
+            names.add(L(profile.name));
+            if (profile.id.equals(selectedMosque.id)) selectedIndex = i;
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, names);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        mosqueSpinner.setAdapter(adapter);
+        mosqueSpinner.setSelection(selectedIndex);
+        mosqueSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                MosqueProfile chosen = mosqueProfiles.get(position);
+                if (selectedMosque == null || !selectedMosque.id.equals(chosen.id)) selectMosque(chosen);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+    }
+
+    private void selectMosque(MosqueProfile profile) {
+        if (selectedMosque != null && !selectedMosque.id.equals(profile.id)) {
+            if (active) restoreSound("Mosque selection changed");
+            demoInside = false;
+            store.edit().putBoolean(GeofenceReceiver.KEY_INSIDE, false).apply();
+            if (demoGeoSwitch != null) demoGeoSwitch.setChecked(false);
+        }
+        selectedMosque = profile;
+        store.edit().putString("selected_mosque_id", profile.id).apply();
+        if (mosqueHeader != null) mosqueHeader.setText(L(profile.name + (profile.id.equals("tarfaya") ? " · Meknes" : "")));
+        if (locationInfo != null) locationInfo.setText(L(profile.hasPrayerCalendar
+            ? "Selected mosque location: Tarfaya, Meknes." : "Selected mosque saved. Its prayer calendar is not configured yet."));
+        refreshScheduleRows();
+        schedulePreIqamaScan();
+        evaluateState();
+    }
+
+    private void showAddMosqueDialog() {
+        LinearLayout fields = column();
+        fields.setPadding(dp(20), dp(8), dp(20), 0);
+        EditText name = new EditText(this);
+        name.setSingleLine(true);
+        name.setHint(L("Mosque name"));
+        fields.addView(name);
+        EditText latitude = new EditText(this);
+        latitude.setSingleLine(true);
+        latitude.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        latitude.setHint(L("Latitude (for example 33.90)"));
+        fields.addView(latitude);
+        EditText longitude = new EditText(this);
+        longitude.setSingleLine(true);
+        longitude.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        longitude.setHint(L("Longitude (for example -5.54)"));
+        fields.addView(longitude);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(L("Add a mosque"))
+            .setView(fields).setPositiveButton(L("Save mosque"), null).setNegativeButton(L("Cancel"), null).create();
+        dialog.setOnShowListener(unused -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String mosqueName = name.getText().toString().trim();
+            try {
+                double lat = Double.parseDouble(latitude.getText().toString().trim());
+                double lon = Double.parseDouble(longitude.getText().toString().trim());
+                if (mosqueName.isEmpty() || lat < -90 || lat > 90 || lon < -180 || lon > 180) throw new IllegalArgumentException();
+                MosqueProfile profile = new MosqueProfile("custom_" + System.currentTimeMillis(), mosqueName, lat, lon, false);
+                mosqueProfiles.add(profile);
+                saveCustomMosques();
+                selectMosque(profile);
+                refreshMosqueChoices();
+                dialog.dismiss();
+            } catch (RuntimeException ex) {
+                Toast.makeText(this, L("Enter a mosque name and valid latitude and longitude."), Toast.LENGTH_LONG).show();
+            }
+        }));
+        dialog.show();
+    }
+
+    private void saveCustomMosques() {
+        JSONArray saved = new JSONArray();
+        for (MosqueProfile profile : mosqueProfiles) {
+            if (profile.id.equals("tarfaya")) continue;
+            JSONObject item = new JSONObject();
+            try {
+                item.put("id", profile.id);
+                item.put("name", profile.name);
+                item.put("latitude", profile.latitude);
+                item.put("longitude", profile.longitude);
+                saved.put(item);
+            } catch (org.json.JSONException ignored) {}
+        }
+        store.edit().putString("custom_mosques", saved.toString()).apply();
+    }
+
+    private static final class MosqueProfile {
+        final String id;
+        final String name;
+        final double latitude;
+        final double longitude;
+        final boolean hasPrayerCalendar;
+
+        MosqueProfile(String id, String name, double latitude, double longitude, boolean hasPrayerCalendar) {
+            this.id = id;
+            this.name = name;
+            this.latitude = latitude;
+            this.longitude = longitude;
+            this.hasPrayerCalendar = hasPrayerCalendar;
+        }
+    }
+
     private void refreshScheduleRows() {
         if (scheduleRows == null) return;
         LocalDate today = LocalDate.now(ZoneId.of("Africa/Casablanca"));
         displayedDate = today;
         scheduleRows.removeAllViews();
+        if (selectedMosque == null || !selectedMosque.hasPrayerCalendar) {
+            scheduleRows.addView(text("No Adhan calendar is configured for this mosque yet. Add its local prayer data before using automatic timing.",
+                13, colors.waiting, false));
+            return;
+        }
         List<PrayerSchedule.Event> events = PrayerSchedule.forDate(this, today);
         if (events.isEmpty()) {
             scheduleRows.addView(text("Iqama times are not available for this date.", 13, colors.muted, false));
@@ -522,48 +700,49 @@ class MainActivityV3 extends AppCompatActivity {
     private void updateHome(boolean wifi, boolean inside, String prayer, long targetAt, long now) {
         if (homeWifiStatus == null) return;
         boolean wifiConfigured = manualWifiOverride || !selectedSsid.isEmpty();
-        homeWifiStatus.setText("WI-FI\n" + (wifi ? "PRESENT" : wifiConfigured ? "NOT DETECTED" : "NOT SET") +
+        homeWifiStatus.setText(L("WI-FI") + "\n" + L(wifi ? "PRESENT" : wifiConfigured ? "NOT DETECTED" : "NOT SET") +
             (selectedSsid.isEmpty() ? "" : "\n" + selectedSsid));
         homeWifiStatus.setTextColor(wifi ? colors.good : wifiConfigured ? colors.bad : colors.waiting);
         homeWifiStatus.setBackground(roundRect(wifi ? colors.goodSoft : wifiConfigured ? colors.badSoft : colors.waitingSoft,
             dp(19), wifi ? colors.goodSoft : wifiConfigured ? colors.badSoft : colors.waitingSoft));
-        homeGeoStatus.setText("GEOFENCE\n" + (inside ? "INSIDE" : "OUTSIDE") + "\n" + geofenceRadiusMetres + " m radius");
+        homeGeoStatus.setText(L("GEOFENCE") + "\n" + L(inside ? "INSIDE" : "OUTSIDE") + "\n" +
+            L(geofenceRadiusMetres + " m radius"));
         homeGeoStatus.setTextColor(inside ? colors.good : colors.bad);
         homeGeoStatus.setBackground(roundRect(inside ? colors.goodSoft : colors.badSoft, dp(19), inside ? colors.goodSoft : colors.badSoft));
 
         long nextAt = nextFutureIqama(now);
         if (testIqamaAt > now) {
             nextAt = testIqamaAt;
-            homeNextPrayer.setText("Test Iqama · " + timeOf(testIqamaAt));
+            homeNextPrayer.setText(L("Test Iqama · " + timeOf(testIqamaAt)));
         } else if (nextAt > 0) {
             PrayerSchedule.Event next = nextFutureEvent(now);
-            homeNextPrayer.setText(next == null ? "Next Iqama · " + timeOf(nextAt) :
-                "Next Iqama · " + next.prayer + " · " + timeOf(next.iqamaAt));
+            homeNextPrayer.setText(L(next == null ? "Next Iqama · " + timeOf(nextAt) :
+                "Next Iqama · " + next.prayer + " · " + timeOf(next.iqamaAt)));
         } else {
-            homeNextPrayer.setText("Iqama schedule unavailable");
+            homeNextPrayer.setText(L("Iqama schedule unavailable"));
         }
-        homeCountdownLabel.setText(active ? "NEXT IQAMA AFTER THIS SALAT" : "COUNTDOWN TO IQAMA");
+        homeCountdownLabel.setText(L(active ? "NEXT IQAMA AFTER THIS SALAT" : "COUNTDOWN TO IQAMA"));
         homeCountdown.setText(nextAt > 0 ? formatMs(nextAt - now) : "--:--:--");
-        homeModeStatus.setText(active ? "●  SALAT ACTIVE · SILENT" : wifi && inside ? "●  PRESENCE READY · WAITING FOR IQAMA" : "●  WAITING FOR CONDITIONS");
+        homeModeStatus.setText(L(active ? "●  SALAT ACTIVE · SILENT" : wifi && inside ? "●  PRESENCE READY · WAITING FOR IQAMA" : "●  WAITING FOR CONDITIONS"));
         homeModeStatus.setTextColor(active ? colors.good : wifi && inside ? colors.good : colors.waiting);
         homeModeStatus.setBackground(roundRect(active ? colors.goodSoft : wifi && inside ? colors.goodSoft : colors.waitingSoft,
             dp(15), active ? colors.goodSoft : wifi && inside ? colors.goodSoft : colors.waitingSoft));
-        homeProfile.setText("Phone profile · " + AudioProfileController.modeName(audioController.currentMode()) +
-            (active ? "   ·   restores " + timeOf(activeRestoreAt) : ""));
+        homeProfile.setText(L("Phone profile · " + AudioProfileController.modeName(audioController.currentMode()) +
+            (active ? "   ·   restores " + timeOf(activeRestoreAt) : "")));
         homeProfile.setTextColor(colors.muted);
     }
 
     private void updateImamPage() {
         if (sessionStatus == null) return;
-        sessionStatus.setText(active ? "●  SALAT ACTIVE ON THIS PHONE" : "●  NO ACTIVE LOCAL SESSION");
+        sessionStatus.setText(L(active ? "●  SALAT ACTIVE ON THIS PHONE" : "●  NO ACTIVE LOCAL SESSION"));
         sessionStatus.setTextColor(active ? colors.good : colors.muted);
         sessionStatus.setBackground(roundRect(active ? colors.goodSoft : colors.surface, dp(15), active ? colors.goodSoft : colors.border));
         endPrayerButton.setEnabled(active);
         endPrayerButton.setAlpha(active ? 1f : 0.55f);
-        localSessionsCount.setText(String.valueOf(store.getInt("silence_sessions", 0)) + "\nSilence sessions");
-        localReleaseCount.setText(String.valueOf(store.getInt("imam_release_count", 0)) + "\nImam releases");
+        localSessionsCount.setText(store.getInt("silence_sessions", 0) + "\n" + L("Silence sessions"));
+        localReleaseCount.setText(store.getInt("imam_release_count", 0) + "\n" + L("Imam releases"));
         connectedCount.setText("—");
-        attendeeStatus.setText("Live attendee data is not connected. The mosque-wide roster and release require the authenticated backend and attendee clients.");
+        attendeeStatus.setText(L("Live attendee data is not connected. The mosque-wide roster and release require the authenticated backend and attendee clients."));
     }
 
     private boolean effectiveWifiPresent(long now) {
@@ -575,12 +754,12 @@ class MainActivityV3 extends AppCompatActivity {
 
     private void activateSound(long iqamaAt, long restoreAt) {
         if (!audioController.hasPolicyAccess()) {
-            Toast.makeText(this, "Open Sound access to enable automatic silence.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, L("Open Sound access to enable automatic silence."), Toast.LENGTH_LONG).show();
             startActivity(audioController.policyAccessSettingsIntent());
             return;
         }
         if (!audioController.silenceAndSave()) {
-            Toast.makeText(this, "Silent mode could not be applied on this phone.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, L("Silent mode could not be applied on this phone."), Toast.LENGTH_LONG).show();
             return;
         }
         active = true;
@@ -591,7 +770,7 @@ class MainActivityV3 extends AppCompatActivity {
             .putLong("active_restore_at", activeRestoreAt)
             .putInt("silence_sessions", store.getInt("silence_sessions", 0) + 1)
             .commit();
-        Toast.makeText(this, "Silent mode on · previous profile saved", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, L("Silent mode on · previous profile saved"), Toast.LENGTH_SHORT).show();
     }
 
     private void restoreSound(String reason) {
@@ -599,7 +778,7 @@ class MainActivityV3 extends AppCompatActivity {
         boolean imamRelease = reason.toLowerCase(Locale.ROOT).contains("imam");
         boolean restored = audioController.restore();
         if (!restored) {
-            Toast.makeText(this, "Restore pending · Sound access is required.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, L("Restore pending · Sound access is required."), Toast.LENGTH_LONG).show();
             return;
         }
         long releasedIqama = activeIqamaAt;
@@ -613,7 +792,7 @@ class MainActivityV3 extends AppCompatActivity {
                 .putInt("imam_release_count", store.getInt("imam_release_count", 0) + 1);
         }
         edit.commit();
-        Toast.makeText(this, "Restored " + AudioProfileController.modeName(audioController.currentMode()) + " · " + reason,
+        Toast.makeText(this, L("Restored " + AudioProfileController.modeName(audioController.currentMode()) + " · " + reason),
             Toast.LENGTH_SHORT).show();
     }
 
@@ -636,16 +815,16 @@ class MainActivityV3 extends AppCompatActivity {
         boolean locationOn = manager != null && (Build.VERSION.SDK_INT >= 28 ? manager.isLocationEnabled() :
             manager.isProviderEnabled(LocationManager.GPS_PROVIDER) || manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER));
         if (!locationOn) {
-            if (wifiScanInfo != null) wifiScanInfo.setText("Turn on Android Location, then refresh again.");
+            if (wifiScanInfo != null) wifiScanInfo.setText(L("Turn on Android Location, then refresh again."));
             return;
         }
-        if (wifiScanInfo != null) wifiScanInfo.setText("Scanning visible networks…");
+        if (wifiScanInfo != null) wifiScanInfo.setText(L("Scanning visible networks…"));
         wifiScanner.requestScan((found, fresh) -> runOnUiThread(() -> {
             ssids.clear();
             ssids.addAll(found);
             if (fresh) lastFreshScan = System.currentTimeMillis();
             List<String> choices = new ArrayList<>();
-            choices.add(ssids.isEmpty() ? "No networks found" : "Select a Wi-Fi network");
+            choices.add(L(ssids.isEmpty() ? "No networks found" : "Select a Wi-Fi network"));
             choices.addAll(ssids);
             ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, choices);
             adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -661,18 +840,18 @@ class MainActivityV3 extends AppCompatActivity {
                 }
                 @Override public void onNothingSelected(AdapterView<?> parent) {}
             });
-            wifiScanInfo.setText((fresh ? "Fresh scan" : "Cached / throttled scan") + " · " + found.size() + " networks · " +
-                new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date()));
+            wifiScanInfo.setText(L((fresh ? "Fresh scan" : "Cached / throttled scan") + " · " + found.size() + " networks · " +
+                new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date())));
             evaluateState();
-            if (showToast) Toast.makeText(this, "Wi-Fi list refreshed", Toast.LENGTH_SHORT).show();
+            if (showToast) Toast.makeText(this, L("Wi-Fi list refreshed"), Toast.LENGTH_SHORT).show();
         }));
     }
 
     private void ensureLocationForGeofence() {
         if (!ensureLocationPermissions()) return;
         geofenceManager.armAtCurrentLocation(geofenceRadiusMetres, (ok, message) -> runOnUiThread(() -> {
-            locationInfo.setText(message);
-            Toast.makeText(this, ok ? "Location and geofence refreshed" : message, Toast.LENGTH_LONG).show();
+            locationInfo.setText(L(message));
+            Toast.makeText(this, L(ok ? "Location and geofence refreshed" : message), Toast.LENGTH_LONG).show();
         }));
     }
 
@@ -681,19 +860,19 @@ class MainActivityV3 extends AppCompatActivity {
             permissionRequest.launch(new String[]{Manifest.permission.ACCESS_FINE_LOCATION});
             return;
         }
-        locationInfo.setText("Refreshing current location…");
+        locationInfo.setText(L("Refreshing current location…"));
         geofenceManager.refreshCurrentLocation((ok, message) -> runOnUiThread(() -> {
-            locationInfo.setText(message);
-            if (!ok) Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+            locationInfo.setText(L(message));
+            if (!ok) Toast.makeText(this, L(message), Toast.LENGTH_LONG).show();
         }));
     }
 
-    private void ensureLocationForTarfayaGeofence() {
+    private void ensureSelectedMosqueGeofence() {
         if (!ensureLocationPermissions()) return;
-        geofenceManager.armAtCoordinates(33.90066, -5.54761, geofenceRadiusMetres,
-            "Tarfaya Mosque", (ok, message) -> runOnUiThread(() -> {
-                locationInfo.setText(message);
-                Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+        geofenceManager.armAtCoordinates(selectedMosque.latitude, selectedMosque.longitude, geofenceRadiusMetres,
+            selectedMosque.name, (ok, message) -> runOnUiThread(() -> {
+                locationInfo.setText(L(message));
+                Toast.makeText(this, L(message), Toast.LENGTH_LONG).show();
             }));
     }
 
@@ -704,11 +883,11 @@ class MainActivityV3 extends AppCompatActivity {
         }
         if (Build.VERSION.SDK_INT >= 29 && ContextCompat.checkSelfPermission(this,
             Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            new AlertDialog.Builder(this).setTitle("Allow background location")
-                .setMessage("Choose Allow all the time in app location settings so geofence enter and exit events can arrive while the app is closed.")
-                .setPositiveButton("Open app settings", (dialog, which) -> startActivity(new Intent(
+            new AlertDialog.Builder(this).setTitle(L("Allow background location"))
+                .setMessage(L("Choose Allow all the time in app location settings so geofence enter and exit events can arrive while the app is closed."))
+                .setPositiveButton(L("Open app settings"), (dialog, which) -> startActivity(new Intent(
                     Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + getPackageName()))))
-                .setNegativeButton("Cancel", null).show();
+                .setNegativeButton(L("Cancel"), null).show();
             return false;
         }
         return true;
@@ -736,6 +915,7 @@ class MainActivityV3 extends AppCompatActivity {
     }
 
     private PrayerSchedule.Event nextFutureEvent(long now) {
+        if (selectedMosque == null || !selectedMosque.hasPrayerCalendar) return null;
         for (PrayerSchedule.Event event : PrayerSchedule.nextTwoDays(this, LocalDate.now(ZoneId.of("Africa/Casablanca"))))
             if (event.iqamaAt > now) return event;
         return null;
@@ -803,7 +983,7 @@ class MainActivityV3 extends AppCompatActivity {
 
     private Button button(String label, boolean primary) {
         Button button = new Button(this);
-        button.setText(label);
+        button.setText(L(label));
         button.setAllCaps(false);
         button.setTextSize(13);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -817,7 +997,7 @@ class MainActivityV3 extends AppCompatActivity {
 
     private TextView text(String value, int size, int color, boolean bold) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(L(value));
         view.setTextSize(size);
         view.setTextColor(color);
         if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -865,6 +1045,179 @@ class MainActivityV3 extends AppCompatActivity {
 
     private int dp(float value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    /** Small built-in English/Arabic phrasebook for this offline prototype. */
+    private String L(String value) {
+        if (!arabicLanguage || value == null) return value;
+        if (value.endsWith(" m radius")) return value.substring(0, value.length() - " m radius".length()) + " م نصف قطر";
+        if (value.startsWith("Restored ")) return value.replace("Restored ", "تمت استعادة وضع ")
+            .replace("Normal", "عادي").replace("Vibrate", "اهتزاز").replace("Silent", "صامت")
+            .replace(" · Imam ended Salat locally", " · أنهى الإمام الصلاة على هذا الهاتف")
+            .replace(" · Selected Wi-Fi left range", " · خرجت شبكة واي فاي المختارة من النطاق")
+            .replace(" · Geofence exited", " · خرج الهاتف من النطاق الجغرافي")
+            .replace(" · Restore duration elapsed", " · انتهت مدة الاستعادة");
+        if (value.startsWith("Geofence armed: ")) return value.replace("Geofence armed: ", "تم تفعيل النطاق الجغرافي: ")
+            .replace("current test location", "موقع الاختبار الحالي").replace("Tarfaya Mosque", "مسجد طرفاية").replace(" m radius.", " م نصف قطر.");
+        if (value.startsWith("Current location · ")) return value.replace("Current location", "الموقع الحالي")
+            .replace(" · accuracy ±", " · الدقة ±").replace(" m", " م");
+        if (value.startsWith("Could not refresh current location: ")) return value.replace("Could not refresh current location:", "تعذّر تحديث الموقع الحالي:");
+        if (value.startsWith("Location lookup failed: ")) return value.replace("Location lookup failed:", "فشل تحديد الموقع:");
+        if (value.startsWith("Location permission is missing: ")) return value.replace("Location permission is missing:", "إذن الموقع غير متاح:");
+        if (value.startsWith("Geofence radius · "))
+            return "نصف قطر النطاق · " + value.substring("Geofence radius · ".length()).replace(" m", " م");
+        if (value.startsWith("Restore · ") && value.endsWith(" minutes after Iqama")) {
+            String number = value.substring("Restore · ".length(), value.length() - " minutes after Iqama".length());
+            return "استعادة الصوت بعد الإقامة بـ" + number + " دقيقة";
+        }
+        if (value.startsWith("Next Iqama · ")) {
+            String details = value.substring("Next Iqama · ".length());
+            int separator = details.indexOf(" · ");
+            return separator < 0 ? "الإقامة القادمة · " + details : "الإقامة القادمة · " +
+                L(details.substring(0, separator)) + " · " + details.substring(separator + 3);
+        }
+        if (value.startsWith("Test Iqama · ")) return "إقامة تجريبية · " + value.substring("Test Iqama · ".length());
+        if (value.startsWith("Adhan ")) return "الأذان " + value.substring("Adhan ".length());
+        if (value.startsWith("Iqama +")) return "الإقامة بعد " + value.substring("Iqama +".length()).replace(" min", " دقيقة");
+        if (value.startsWith("Phone profile · ")) return value.replace("Phone profile · ", "ملف صوت الهاتف · ")
+            .replace("Normal", "عادي").replace("Vibrate", "اهتزاز").replace("Silent", "صامت")
+            .replace("restores", "يستعيد الصوت");
+        if (value.startsWith("Fresh scan · ") || value.startsWith("Cached / throttled scan · ")) {
+            boolean fresh = value.startsWith("Fresh scan · ");
+            String details = value.substring(value.indexOf(" · ") + 3).replace(" networks · ", " شبكة · ");
+            return (fresh ? "بحث حديث · " : "بحث محفوظ أو مقيّد · ") + details;
+        }
+        switch (value) {
+            case "العربية": return "العربية";
+            case "English": return "English";
+            case "Home": return "الرئيسية";
+            case "Setup": return "الإعدادات";
+            case "Schedule": return "الجدول";
+            case "Imam": return "الإمام";
+            case "More": return "المزيد";
+            case "Tarfaya Mosque · Meknes": return "مسجد طرفاية · مكناس";
+            case "MOSQUE": return "المسجد";
+            case "Selected mosque": return "المسجد المختار";
+            case "Add a mosque": return "إضافة مسجد";
+            case "Set geofence for selected mosque": return "تحديد نطاق المسجد المختار";
+            case "Times are calculated from the selected mosque's available prayer calendar.": return "تُحسب الأوقات من تقويم الصلاة المتاح للمسجد المختار.";
+            case "No Adhan calendar is configured for this mosque yet. Add its local prayer data before using automatic timing.": return "لا يوجد تقويم أذان مُعدّ لهذا المسجد بعد. أضف بياناته المحلية قبل استخدام التوقيت التلقائي.";
+            case "Selected mosque location: Tarfaya, Meknes.": return "موقع المسجد المختار: طرفاية، مكناس.";
+            case "Selected mosque saved. Its prayer calendar is not configured yet.": return "تم حفظ المسجد. لم يُعدّ تقويم الصلاة الخاص به بعد.";
+            case "Mosque name": return "اسم المسجد";
+            case "Latitude (for example 33.90)": return "خط العرض (مثال 33.90)";
+            case "Longitude (for example -5.54)": return "خط الطول (مثال -5.54)";
+            case "Save mosque": return "حفظ المسجد";
+            case "Enter a mosque name and valid latitude and longitude.": return "أدخل اسم المسجد وخط عرض وخط طول صحيحين.";
+            case "Fajer": return "الفجر";
+            case "Doher": return "الظهر";
+            case "Aser": return "العصر";
+            case "Maghrib": return "المغرب";
+            case "Isha": return "العشاء";
+            case "PRAYER STATUS": return "حالة الصلاة";
+            case "NEXT IQAMA": return "الإقامة القادمة";
+            case "Prayer times are unavailable": return "مواقيت الصلاة غير متاحة";
+            case "Silence begins 30 seconds before Iqama": return "يبدأ الصامت قبل الإقامة بـ30 ثانية";
+            case "STATUS KEY": return "دليل الحالات";
+            case "Ready": return "جاهز";
+            case "Waiting": return "انتظار";
+            case "Not detected": return "غير مكتشف";
+            case "WI-FI": return "واي فاي";
+            case "GEOFENCE": return "النطاق الجغرافي";
+            case "PRESENT": return "متصل";
+            case "NOT DETECTED": return "غير مكتشف";
+            case "NOT SET": return "غير محدد";
+            case "INSIDE": return "داخل النطاق";
+            case "OUTSIDE": return "خارج النطاق";
+            case " m radius": return " م نصف قطر";
+            case "COUNTDOWN TO IQAMA": return "العد التنازلي للإقامة";
+            case "NEXT IQAMA AFTER THIS SALAT": return "الإقامة التالية بعد هذه الصلاة";
+            case "●  SALAT ACTIVE · SILENT": return "●  الصلاة جارية · الهاتف صامت";
+            case "●  PRESENCE READY · WAITING FOR IQAMA": return "●  الموقع جاهز · بانتظار الإقامة";
+            case "●  WAITING FOR CONDITIONS": return "●  بانتظار تحقق الشروط";
+            case "Iqama schedule unavailable": return "جدول الإقامة غير متاح";
+            case "Selected mosque network": return "شبكة المسجد المختارة";
+            case "Choose the Wi-Fi and location conditions for this phone.": return "اختر شبكة واي فاي وموقع هذا الهاتف.";
+            case "WI-FI PRESENCE": return "التواجد عبر واي فاي";
+            case "Refresh networks to choose an SSID": return "حدّث الشبكات لاختيار شبكة واي فاي";
+            case "No scan yet": return "لم يتم البحث بعد";
+            case "Refresh Wi-Fi networks": return "تحديث شبكات واي فاي";
+            case "LOCATION PRESENCE": return "التواجد بالموقع";
+            case "Location has not been refreshed": return "لم يتم تحديث الموقع بعد";
+            case "Refresh current location": return "تحديث الموقع الحالي";
+            case "Use current location as test-zone center": return "استخدام الموقع الحالي مركزاً للنطاق التجريبي";
+            case "Use Tarfaya Mosque geofence": return "استخدام نطاق مسجد طرفاية";
+            case "ACTIVATION RULE": return "قاعدة التفعيل";
+            case "Selected Wi-Fi + inside the geofence + within the prayer window": return "شبكة واي فاي المختارة + داخل النطاق + ضمن وقت الصلاة";
+            case "Both presence signals are required. This device scans Wi-Fi and refreshes its geofence from here.": return "يلزم تحقق علامتي التواجد معاً. يبحث هذا الهاتف عن الشبكة ويحدّث موقع النطاق من هنا.";
+            case "Iqama schedule": return "جدول الإقامة";
+            case "Times are calculated from the Tarfaya Adhan calendar and your offsets.": return "تُحسب الأوقات من تقويم أذان طرفاية والفواصل المحددة.";
+            case "TODAY · ADHAN → IQAMA": return "اليوم · الأذان ← الإقامة";
+            case "SILENT WINDOW": return "فترة الصمت";
+            case "Start · 30 seconds before Iqama": return "البدء · قبل الإقامة بـ30 ثانية";
+            case "Restore · 10 minutes after Iqama": return "استعادة الصوت بعد الإقامة بـ10 دقائق";
+            case "Restore duration can be set from 1 to 30 minutes. Default: 10 minutes.": return "يمكن ضبط مدة الاستعادة من دقيقة إلى 30 دقيقة. الافتراضي: 10 دقائق.";
+            case "DEVICE TEST": return "اختبار الهاتف";
+            case "Test in 30 sec": return "اختبار بعد 30 ثانية";
+            case "Test in 90 sec": return "اختبار بعد 90 ثانية";
+            case "Imam dashboard": return "لوحة الإمام";
+            case "Local controls and this phone's activity.": return "عناصر التحكم المحلية ونشاط هذا الهاتف.";
+            case "No active local session": return "لا توجد جلسة محلية نشطة";
+            case "●  SALAT ACTIVE ON THIS PHONE": return "●  الصلاة جارية على هذا الهاتف";
+            case "●  NO ACTIVE LOCAL SESSION": return "●  لا توجد جلسة محلية نشطة";
+            case "END SALAT": return "إنهاء الصلاة";
+            case "Restore this phone's previous sound profile.": return "استعادة وضع الصوت السابق لهذا الهاتف.";
+            case "End Salat · Restore Sound": return "إنهاء الصلاة · استعادة الصوت";
+            case "This action affects this phone only.": return "يؤثر هذا الإجراء على هذا الهاتف فقط.";
+            case "LOCAL COUNTERS · THIS PHONE": return "عدادات محلية · هذا الهاتف";
+            case "Silence sessions": return "جلسات الصمت";
+            case "Imam releases": return "مرات إنهاء الإمام";
+            case "ATTENDEES": return "المصلون";
+            case "Connected attendees": return "المصلون المتصلون";
+            case "Live attendee data is not connected. The mosque-wide roster and release require the authenticated backend and attendee clients.": return "بيانات المصلين غير متصلة. تتطلب القائمة والتحكم على مستوى المسجد خادماً موثّقاً وتطبيقات متصلة.";
+            case "Appearance, permissions and test controls.": return "المظهر والأذونات وعناصر الاختبار.";
+            case "LANGUAGE": return "اللغة";
+            case "App language": return "لغة التطبيق";
+            case "APPEARANCE": return "المظهر";
+            case "Theme": return "السمة";
+            case "Follow device": return "اتباع إعداد الجهاز";
+            case "Light": return "فاتح";
+            case "Dark": return "داكن";
+            case "TEST OVERRIDES": return "إعدادات اختبار مؤقتة";
+            case "Simulate Wi-Fi presence": return "محاكاة وجود شبكة واي فاي";
+            case "Simulate inside geofence": return "محاكاة الوجود داخل النطاق";
+            case "Overrides are for local testing and do not represent mosque-wide attendance.": return "هذه الإعدادات للاختبار المحلي ولا تمثل حضور المسجد كله.";
+            case "DEVICE ACCESS": return "إذن الهاتف";
+            case "Sound & Do Not Disturb access": return "إذن الصوت وعدم الإزعاج";
+            case "Review app permissions": return "مراجعة أذونات التطبيق";
+            case "Iqama times are not available for this date.": return "مواقيت الإقامة غير متاحة لهذا التاريخ.";
+            case "Turn on Android Location, then refresh again.": return "فعّل الموقع على Android ثم حدّث مرة أخرى.";
+            case "Scanning visible networks…": return "جارٍ البحث عن الشبكات الظاهرة…";
+            case "No networks found": return "لم يتم العثور على شبكات";
+            case "Select a Wi-Fi network": return "اختر شبكة واي فاي";
+            case "Wi-Fi list refreshed": return "تم تحديث قائمة واي فاي";
+            case "Refreshing current location…": return "جارٍ تحديث الموقع الحالي…";
+            case "Location and geofence refreshed": return "تم تحديث الموقع والنطاق الجغرافي";
+            case "Grant precise location to refresh the current position.": return "اسمح بالموقع الدقيق لتحديث موقعك الحالي.";
+            case "Current location is unavailable. Turn on Android Location and refresh again.": return "الموقع الحالي غير متاح. فعّل الموقع على Android ثم حدّث مرة أخرى.";
+            case "Location permission is missing.": return "إذن الموقع غير متاح.";
+            case "Grant precise location first.": return "اسمح بالموقع الدقيق أولاً.";
+            case "Allow background location": return "السماح بالموقع في الخلفية";
+            case "Open app settings": return "فتح إعدادات التطبيق";
+            case "Cancel": return "إلغاء";
+            case "Open Sound access to enable automatic silence.": return "افتح إذن الصوت لتفعيل الصمت التلقائي.";
+            case "Silent mode could not be applied on this phone.": return "تعذّر تفعيل الوضع الصامت على هذا الهاتف.";
+            case "Silent mode on · previous profile saved": return "تم تفعيل الصامت · حُفظ وضع الصوت السابق";
+            case "Restore pending · Sound access is required.": return "الاستعادة معلّقة · يلزم إذن الصوت.";
+            case "Imam ended Salat locally": return "أنهى الإمام الصلاة على هذا الهاتف";
+            case "Selected Wi-Fi left range": return "خرجت شبكة واي فاي المختارة من النطاق";
+            case "Geofence exited": return "خرج الهاتف من النطاق الجغرافي";
+            case "Restore duration elapsed": return "انتهت مدة الاستعادة";
+            case "Choose Allow all the time in app location settings so geofence enter and exit events can arrive while the app is closed.": return "اختر السماح طوال الوقت من إعدادات الموقع حتى تصل أحداث دخول النطاق والخروج منه والتطبيق مغلق.";
+            default: return value.replace("Tarfaya Mosque", "مسجد طرفاية").replace("Meknes", "مكناس").replace("Fajer", "الفجر")
+                .replace("Doher", "الظهر").replace("Aser", "العصر").replace("Maghrib", "المغرب")
+                .replace("Isha", "العشاء").replace("Iqama", "الإقامة").replace("Adhan", "الأذان");
+        }
     }
 
     private int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }

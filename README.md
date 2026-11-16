@@ -1,8 +1,12 @@
 # Mosque Auto-Silent
 
-## Android prototype v0.3.0
+## Android prototype v0.4.0
 
-Mosque Auto-Silent helps an attendee's Android phone silence its ringer during prayer. The current prototype uses a selected Wi-Fi SSID and an active geofence as two required presence signals. It derives Iqama from the checked-in Tarfaya Adhan calendar and the offsets supplied by the local Imam:
+Mosque Auto-Silent helps an attendee's Android phone silence its ringer during prayer. Activation requires both a selected Wi-Fi SSID and geofence presence. The app saves and restores the phone's previous ringer profile.
+
+### Prayer timing
+
+The currently supported Tarfaya calendar is bundled for 2026. Iqama is calculated from Adhan using the supplied offsets:
 
 | Prayer | Iqama offset after Adhan |
 | --- | ---: |
@@ -12,19 +16,25 @@ Mosque Auto-Silent helps an attendee's Android phone silence its ringer during p
 | Maghrib | 10 minutes |
 | Isha | 15 minutes |
 
-Silence begins 30 seconds before Iqama. The saved ringer profile is restored 10 minutes after Iqama by default; the duration is configurable from 1 to 30 minutes. The Imam control ends the prayer session on this phone only.
+Silence starts 30 seconds before Iqama. Restore defaults to 10 minutes after Iqama and is configurable from 1 to 30 minutes. The app does not use Tarfaya's calendar for another selected mosque.
 
-The Android interface includes a Home countdown, Setup controls for SSID and geofence/location refresh, Schedule and timing controls, a local Imam dashboard, and light/dark/system appearance settings. Status colors distinguish ready, waiting and active conditions. The original mosque mark and teal/green palette are inspired by the visual direction of MAWAQIT; this project is not affiliated with MAWAQIT.
+### Mosque and language selection
 
-## Components and boundaries
+Setup lets the operator select Tarfaya or add a local mosque profile with a name and coordinates. Tarfaya is the only profile with prayer calendar data; other profiles clearly report that their calendar is missing and scheduled activation stays unavailable until their local timings are added. No MAWAQIT API is connected. The app includes English and Arabic UI options, RTL layout in Arabic, and a faint original zellij-inspired geometric background for both themes.
 
-- `android/` is the native Android application. Wi-Fi scanning, geofence events, local audio control and local Imam release run on the device.
-- `demo/` is a browser simulator. It does not scan Wi-Fi radios or alter Android audio settings.
-- `backend/worker/` is an undeployed scaffold for possible future mosque-wide commands. It is not connected to the app. Attendee rosters and connected-device counts are therefore unavailable; the Imam screen states this limitation and shows only on-device counters.
+### Imam controls and boundaries
+
+The Imam tab has a local End Salat action and on-device counters. Connected attendees and mosque-wide release are unavailable because the backend is not deployed or connected. The original mosque mark and teal/green palette are inspired by MAWAQIT's visual direction; this project is not affiliated with MAWAQIT and does not use its logo.
+
+## Components
+
+- `android/` is the native Android app.
+- `demo/` is a browser simulator; it cannot scan Wi-Fi radios or change Android sound settings.
+- `backend/worker/` is an undeployed scaffold for future remote commands.
 
 ## Build the Android debug APK
 
-Requirements: JDK 17 and Android SDK Platform 36. The Gradle wrapper pins Gradle 8.11.1; the project uses Android Gradle Plugin 8.10.1.
+Requirements: JDK 17 and Android SDK Platform 36. Gradle 8.11.1 is pinned by the wrapper; the Android Gradle Plugin version is 8.10.1.
 
 Windows PowerShell:
 
@@ -40,18 +50,13 @@ cd android
 ./gradlew assembleDebug
 ```
 
-Expected APK: `android/app/build/outputs/apk/debug/app-debug.apk`. CI runs the browser smoke test and Android unit tests, builds the debug APK, and uploads it as `mosque-auto-silent-debug-apk`. See [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) for the latest verified build and artifact details.
+Expected build output: `android/app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions runs the browser smoke test and Android unit tests, builds the APK, and uploads `mosque-auto-silent-debug-apk`. See [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) for verified build status and artifact details.
 
-## Android prototype behavior and limits
+## Prototype limits
 
-- Select the mosque SSID explicitly. Android can throttle Wi-Fi scans or return cached results; cached results do not prove that the selected network disappeared.
-- The geofence requires precise location and background location permission on Android 10+. “Refresh current location” reads a fresh position without changing the configured zone. The separate current-location test-zone control registers a zone at that position.
-- Grant Notification Policy Access for ringer changes. The app saves the prior ringer mode before silencing and restores it on local Imam release, timeout, safety exit or recovery. If access is revoked, restoration remains pending until access is restored.
-- The Home countdown and Schedule page use the bundled `data/tarfaya_prayer_times_2026.csv` calendar. It contains Adhan times for 2026; this is not a live prayer-time feed. Confirm the calendar and offsets with the mosque before operational use.
-- Scheduled Wi-Fi scans depend on the prototype app process. Process death, Android Doze, OEM battery management and background geofence delivery need physical-device testing.
-- The Imam tab is local-only. Remote release and connected attendees require an approved, deployed backend, authenticated roles, client subscriptions and integrated command handling. No backend is deployed or connected in this build.
-- The browser demo is a simulator, not a test of native Android permissions, radios or audio behavior.
-
-## Product rule
-
-Activation requires both selected SSID presence and geofence presence, and the current time must be within the prayer window. Restore the exact saved ringer profile when the Imam ends the local session, the configured duration expires, or a safety exit occurs.
+- Wi-Fi scans can be throttled or cached by Android. Cached results do not establish that a selected network disappeared.
+- Background geofencing requires precise location and, on Android 10+, background location permission. Confirm the mosque geofence center/radius on site.
+- Notification Policy Access is required for ringer changes. If access is revoked during restoration, the app leaves the saved restore pending.
+- The only prayer calendar is Tarfaya's 2026 Adhan calendar. Other local mosque profiles need their own schedule data before automatic timing is available. This is not a live feed.
+- Scheduled scans depend on the app process. Process death, Doze, OEM battery management and background geofence behavior need physical-device testing.
+- The Imam action changes sound on this phone only. The attendee roster and mosque-wide control require an approved, deployed backend and authenticated clients; none is connected.
