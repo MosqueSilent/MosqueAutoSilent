@@ -9,13 +9,13 @@
 ## Verified GitHub Actions build
 
 - Version: `0.7.1` (version code `8`).
-- Source commit: `44cf9f6bcc35d2fe7c638ec5d7a8b68631081189` — [view commit](https://github.com/MosqueSilent/MosqueAutoSilent/commit/44cf9f6bcc35d2fe7c638ec5d7a8b68631081189).
-- Workflow: [Android debug build #11](https://github.com/MosqueSilent/MosqueAutoSilent/actions/runs/43947390399) — **success**.
+- Source commit: `5069ed33a16188cf638d26b6546600ddb7c0f975` — [view commit](https://github.com/MosqueSilent/MosqueAutoSilent/commit/5069ed33a16188cf638d26b6546600ddb7c0f975).
+- Workflow: [Android debug build #12](https://github.com/MosqueSilent/MosqueAutoSilent/actions/runs/43948762809) — **success**.
 - Browser smoke tests, Android unit tests, `assembleDebug`, and artifact upload completed successfully.
-- Artifact: `mosque-auto-silent-debug-apk`, ID `14263449994`, expires 2026-11-30. Download it from the Actions run above.
-- Artifact archive SHA-256: `419488d524c6a15d81130d4007de52668531ba23f22beb82778da13a160a36dc`.
+- Artifact: `mosque-auto-silent-debug-apk`, ID `14267510417`, expires 2026-11-30. Download it from the Actions run above.
+- Artifact archive SHA-256: `d889e8f0b1a5ab132dc43a914af2d42000a57e9644398d0332c91f27ba7f221a`.
 - APK package: `org.mosqueautosilent.app`; verified `versionCode=8`, `versionName=0.7.1`, `minSdk=26`, `targetSdk=35`, and `compileSdk=36` from the downloaded APK.
-- APK SHA-256: `80F8B10B3EEFFFDD7C1CAFECD3C671B7149D7797F713BB668BA87D4C6B840729`.
+- APK SHA-256: `F376413BAD2A64260825FBC2C6974CF44606BAC0DC0B610855FB1A24823C64B8`.
 
 ## Still requires Samsung Galaxy S23 Ultra validation
 

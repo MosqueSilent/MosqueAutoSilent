@@ -56,7 +56,7 @@ cd android
 ./gradlew assembleDebug
 ```
 
-Expected build output: `android/app/build/outputs/apk/debug/app-debug.apk`. The latest verified v0.7.1 APK is available in the [GitHub Actions artifact](https://github.com/MosqueSilent/MosqueAutoSilent/actions/runs/43947390399); see [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) for the artifact ID and checksum. GitHub Actions runs the browser smoke test and Android unit tests, builds the APK, and uploads `mosque-auto-silent-debug-apk`.
+Expected build output: `android/app/build/outputs/apk/debug/app-debug.apk`. The latest verified v0.7.1 APK is available in the [GitHub Actions artifact](https://github.com/MosqueSilent/MosqueAutoSilent/actions/runs/43948762809); see [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) for the artifact ID and checksum. GitHub Actions runs the browser smoke test and Android unit tests, builds the APK, and uploads `mosque-auto-silent-debug-apk`.
 
 ## Prototype limits
 
