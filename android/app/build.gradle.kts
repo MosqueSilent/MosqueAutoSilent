@@ -8,8 +8,8 @@ android {
         applicationId = "org.mosqueautosilent.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "0.6.0"
     }
 
     compileOptions {
@@ -26,5 +26,6 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.core:core:1.16.0")
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("com.google.mlkit:translate:17.0.3")
     testImplementation("junit:junit:4.13.2")
 }

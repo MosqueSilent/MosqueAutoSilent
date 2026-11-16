@@ -44,6 +44,10 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import com.google.mlkit.nl.translate.DownloadConditions;
+import com.google.mlkit.nl.translate.Translation;
+import com.google.mlkit.nl.translate.Translator;
+import com.google.mlkit.nl.translate.TranslatorOptions;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -51,9 +55,14 @@ import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
+import java.util.Set;
 
 /** Mosque Auto-Silent's refreshed native interface and local session controller. */
 class MainActivityV3 extends AppCompatActivity {
@@ -95,7 +104,24 @@ class MainActivityV3 extends AppCompatActivity {
     private TextView durationText;
     private SwitchCompat demoWifiSwitch;
     private SwitchCompat demoGeoSwitch;
-    private boolean arabicLanguage;
+    private String appLanguageCode = "en";
+    private Translator translator;
+    private boolean translationReady;
+    private boolean translating;
+    private final ArrayDeque<String> translationQueue = new ArrayDeque<>();
+    private final Set<String> queuedTranslations = new HashSet<>();
+    private final Map<String, String> translationCache = new HashMap<>();
+    private final Runnable translationRefresh = () -> recreate();
+    private TextView translationInfo;
+    private static final String[] LANGUAGE_CODES = {
+        "en","ar","af","be","bg","bn","ca","cs","cy","da","de","el","eo","es","et","fa","fi","fr","ga","gl","gu","he","hi","hr","ht","hu","id","is","it","ja","ka","kn","ko","lt","lv","mk","mr","ms","mt","nl","no","pl","pt","ro","ru","sk","sl","sq","sv","sw","ta","te","th","tl","tr","uk","ur","vi","zh"
+    };
+    private static final String[] LANGUAGE_NAMES = {
+        "English","العربية","Afrikaans","Беларуская","Български","বাংলা","Català","Čeština","Cymraeg","Dansk","Deutsch","Ελληνικά","Esperanto","Español","Eesti","فارسی","Suomi","Français","Gaeilge","Galego","ગુજરાતી","עברית","हिन्दी","Hrvatski","Kreyòl ayisyen","Magyar","Bahasa Indonesia","Íslenska","Italiano","日本語","ქართული","ಕನ್ನಡ","한국어","Lietuvių","Latviešu","Македонски","मराठी","Bahasa Melayu","Malti","Nederlands","Norsk","Polski","Português","Română","Русский","Slovenčina","Slovenščina","Shqip","Svenska","Kiswahili","தமிழ்","తెలుగు","ไทย","Filipino","Türkçe","Українська","اردو","Tiếng Việt","中文"
+    };
+    private static final String[] LANGUAGE_FLAGS = {
+        "🇬🇧","🇲🇦","🇿🇦","🇧🇾","🇧🇬","🇧🇩","🇪🇸","🇨🇿","🏴","🇩🇰","🇩🇪","🇬🇷","🌐","🇪🇸","🇪🇪","🇮🇷","🇫🇮","🇫🇷","🇮🇪","🇪🇸","🇮🇳","🇮🇱","🇮🇳","🇭🇷","🇭🇹","🇭🇺","🇮🇩","🇮🇸","🇮🇹","🇯🇵","🇬🇪","🇮🇳","🇰🇷","🇱🇹","🇱🇻","🇲🇰","🇮🇳","🇲🇾","🇲🇹","🇳🇱","🇳🇴","🇵🇱","🇵🇹","🇷🇴","🇷🇺","🇸🇰","🇸🇮","🇦🇱","🇸🇪","🇰🇪","🇮🇳","🇮🇳","🇹🇭","🇵🇭","🇹🇷","🇺🇦","🇵🇰","🇻🇳","🇨🇳"
+    };
     private Spinner mosqueSpinner;
     private TextView mosqueHeader;
     private final List<MosqueProfile> mosqueProfiles = new ArrayList<>();
@@ -133,7 +159,9 @@ class MainActivityV3 extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         store = preferences;
-        arabicLanguage = store.getBoolean("arabic_language", false);
+        appLanguageCode = store.getString("app_language", store.getBoolean("arabic_language", false) ? "ar" : "en");
+        if (!isKnownLanguage(appLanguageCode)) appLanguageCode = "en";
+        loadTranslationCache();
         loadMosqueProfiles();
         colors = new UiPalette(isNightMode());
         wifiScanner = new WifiScanner(this);
@@ -161,6 +189,7 @@ class MainActivityV3 extends AppCompatActivity {
         });
 
         buildUi();
+        if (!"en".equals(appLanguageCode) && !"ar".equals(appLanguageCode)) prepareTranslationModel();
         refreshScheduleRows();
         schedulePreIqamaScan();
         evaluateState();
@@ -169,7 +198,8 @@ class MainActivityV3 extends AppCompatActivity {
     private void buildUi() {
         LinearLayout shell = column();
         shell.setBackgroundResource(R.drawable.bg_zellij);
-        shell.setLayoutDirection(arabicLanguage ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR);
+        shell.setLayoutDirection("ar".equals(appLanguageCode) || "fa".equals(appLanguageCode) || "he".equals(appLanguageCode) || "ur".equals(appLanguageCode)
+            ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR);
         shell.setPadding(dp(18), dp(12), dp(18), dp(8));
 
         LinearLayout header = row();
@@ -442,22 +472,30 @@ class MainActivityV3 extends AppCompatActivity {
         LinearLayout language = card();
         language.addView(text("App language", 14, colors.text, true));
         Spinner languageSpinner = new Spinner(this);
-        String[] languageOptions = {L("🇬🇧 English"), L("🇲🇦 العربية")};
+        String[] languageOptions = new String[LANGUAGE_CODES.length];
+        int selectedLanguage = 0;
+        for (int i = 0; i < languageOptions.length; i++) {
+            languageOptions[i] = LANGUAGE_FLAGS[i] + "  " + LANGUAGE_NAMES[i];
+            if (LANGUAGE_CODES[i].equals(appLanguageCode)) selectedLanguage = i;
+        }
         ArrayAdapter<String> languageAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, languageOptions);
         languageAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         languageSpinner.setAdapter(languageAdapter);
-        languageSpinner.setSelection(arabicLanguage ? 1 : 0);
+        languageSpinner.setSelection(selectedLanguage);
         languageSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                boolean useArabic = position == 1;
-                if (useArabic != arabicLanguage) {
-                    store.edit().putBoolean("arabic_language", useArabic).apply();
+                String chosen = LANGUAGE_CODES[position];
+                if (!chosen.equals(appLanguageCode)) {
+                    store.edit().putString("app_language", chosen).putBoolean("arabic_language", "ar".equals(chosen)).apply();
                     recreate();
                 }
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
         language.addView(languageSpinner);
+        translationInfo = text(L("English and Arabic are built in. Other languages use on-device ML Kit and download their model over Wi-Fi."),
+            12, colors.muted, false);
+        language.addView(translationInfo);
         page.addView(language);
 
         addSection(page, "APPEARANCE");
@@ -1108,9 +1146,100 @@ class MainActivityV3 extends AppCompatActivity {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    /** Small built-in English/Arabic phrasebook for this offline prototype. */
+    private static boolean isKnownLanguage(String code) {
+        for (String supported : LANGUAGE_CODES) if (supported.equals(code)) return true;
+        return false;
+    }
+
+    private void loadTranslationCache() {
+        try {
+            JSONObject saved = new JSONObject(store.getString("translation_cache_" + appLanguageCode, "{}"));
+            java.util.Iterator<String> keys = saved.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                translationCache.put(key, saved.optString(key, key));
+            }
+        } catch (Exception ignored) { }
+    }
+
+    private void prepareTranslationModel() {
+        TranslatorOptions options = new TranslatorOptions.Builder()
+            .setSourceLanguage("en")
+            .setTargetLanguage(appLanguageCode)
+            .build();
+        translator = Translation.getClient(options);
+        DownloadConditions wifiOnly = new DownloadConditions.Builder().requireWifi().build();
+        translator.downloadModelIfNeeded(wifiOnly)
+            .addOnSuccessListener(unused -> {
+                translationReady = true;
+                store.edit().putBoolean("translation_model_ready_" + appLanguageCode, true).apply();
+                translateNext();
+                if (translationInfo != null) translationInfo.setText(L("On-device translation is ready. Translation text is generated on this phone."));
+            })
+            .addOnFailureListener(error -> {
+                translationReady = false;
+                if (translationInfo != null) translationInfo.setText(L("Language model needs Wi-Fi. English remains available until the download succeeds."));
+                Toast.makeText(this, "Connect to Wi-Fi to download the language model. English remains available.", Toast.LENGTH_LONG).show();
+            });
+    }
+
+    private void enqueueTranslation(String source) {
+        if (source == null || source.isEmpty() || translationCache.containsKey(source) || !queuedTranslations.add(source)) return;
+        handler.removeCallbacks(translationRefresh);
+        translationQueue.add(source);
+        if (translationReady) translateNext();
+    }
+
+    private void translateNext() {
+        if (!translationReady || translator == null || translating) return;
+        String source = translationQueue.poll();
+        if (source == null) {
+            handler.removeCallbacks(translationRefresh);
+            handler.postDelayed(translationRefresh, 700L);
+            return;
+        }
+        translating = true;
+        translator.translate(source)
+            .addOnSuccessListener(result -> {
+                translationCache.put(source, result);
+                try {
+                    JSONObject saved = new JSONObject();
+                    for (Map.Entry<String, String> entry : translationCache.entrySet()) saved.put(entry.getKey(), entry.getValue());
+                    store.edit().putString("translation_cache_" + appLanguageCode, saved.toString()).apply();
+                } catch (Exception ignored) { }
+                translating = false;
+                translateNext();
+            })
+            .addOnFailureListener(error -> {
+                translating = false;
+                queuedTranslations.remove(source);
+                translateNext();
+            });
+    }
+
+    /** Arabic uses the reviewed built-in phrasebook; other additional languages use on-device ML Kit. */
     private String L(String value) {
-        if (!arabicLanguage || value == null) return value;
+        if (value == null || "en".equals(appLanguageCode)) return value;
+        if (!"ar".equals(appLanguageCode)) {
+            if (value.startsWith("Next Iqama · ")) {
+                String details = value.substring("Next Iqama · ".length());
+                int separator = details.indexOf(" · ");
+                return L("Next Iqama") + " · " + (separator < 0 ? details : L(details.substring(0, separator)) + " · " + details.substring(separator + 3));
+            }
+            if (value.startsWith("Test Iqama · ")) return L("Test Iqama") + " · " + value.substring("Test Iqama · ".length());
+            if (value.startsWith("Adhan ")) return L("Adhan") + " " + value.substring("Adhan ".length());
+            if (value.startsWith("Iqama +")) return L("Iqama after") + " " + value.substring("Iqama +".length());
+            if (value.startsWith("Geofence radius · ")) return L("Geofence radius") + " · " + value.substring("Geofence radius · ".length());
+            if (value.startsWith("Restore · ") && value.endsWith(" minutes after Iqama")) {
+                String minutes = value.substring("Restore · ".length(), value.length() - " minutes after Iqama".length());
+                return L("Restore") + " · " + minutes + " " + L("minutes after Iqama");
+            }
+            if (value.startsWith("Current location · ")) return L("Current location") + " · " + value.substring("Current location · ".length());
+            String cached = translationCache.get(value);
+            if (cached != null) return cached;
+            enqueueTranslation(value);
+            return value;
+        }
         if (value.endsWith(" m radius")) return value.substring(0, value.length() - " m radius".length()) + " م نصف قطر";
         if (value.startsWith("Restored ")) return value.replace("Restored ", "تمت استعادة وضع ")
             .replace("Normal", "عادي").replace("Vibrate", "اهتزاز").replace("Silent", "صامت")
@@ -1323,6 +1452,7 @@ class MainActivityV3 extends AppCompatActivity {
         super.onDestroy();
         handler.removeCallbacksAndMessages(null);
         wifiScanner.unregister();
+        if (translator != null) translator.close();
     }
 
     private static final class UiPalette {
