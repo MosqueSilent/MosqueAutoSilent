@@ -6,6 +6,9 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -17,10 +20,11 @@ import android.os.Looper;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.text.InputType;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -29,7 +33,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -44,6 +47,10 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import android.content.res.ColorStateList;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.drawable.RippleDrawable;
 import com.google.mlkit.common.model.DownloadConditions;
 import com.google.mlkit.nl.translate.Translation;
 import com.google.mlkit.nl.translate.Translator;
@@ -56,6 +63,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -63,6 +71,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /** Mosque Auto-Silent's refreshed native interface and local session controller. */
 class MainActivityV3 extends AppCompatActivity {
@@ -82,7 +91,9 @@ class MainActivityV3 extends AppCompatActivity {
 
     private final List<String> ssids = new ArrayList<>();
     private final List<WifiScanner.Network> wifiNetworks = new ArrayList<>();
-    private Spinner ssidSpinner;
+    private TextView ssidSelector;
+    private SignalBarsView homeWifiSignalBars;
+    private TextView mosqueSelector;
     private TextView wifiScanInfo;
     private TextView locationInfo;
     private TextView homeWifiStatus;
@@ -114,15 +125,19 @@ class MainActivityV3 extends AppCompatActivity {
     private final Runnable translationRefresh = () -> recreate();
     private TextView translationInfo;
     private static final String[] LANGUAGE_CODES = {
-        "en","ar","af","be","bg","bn","ca","cs","cy","da","de","el","eo","es","et","fa","fi","fr","ga","gl","gu","he","hi","hr","ht","hu","id","is","it","ja","ka","kn","ko","lt","lv","mk","mr","ms","mt","nl","no","pl","pt","ro","ru","sk","sl","sq","sv","sw","ta","te","th","tl","tr","uk","ur","vi","zh"
+        "en","ar","fr","af","be","bg","bn","ca","cs","cy","da","de","el","eo","es","et","fa","fi","ga","gl","gu","he","hi","hr","ht","hu","id","is","it","ja","ka","kn","ko","lt","lv","mk","mr","ms","mt","nl","no","pl","pt","ro","ru","sk","sl","sq","sv","sw","ta","te","th","tl","tr","uk","ur","vi","zh"
+
     };
     private static final String[] LANGUAGE_NAMES = {
-        "English","العربية","Afrikaans","Беларуская","Български","বাংলা","Català","Čeština","Cymraeg","Dansk","Deutsch","Ελληνικά","Esperanto","Español","Eesti","فارسی","Suomi","Français","Gaeilge","Galego","ગુજરાતી","עברית","हिन्दी","Hrvatski","Kreyòl ayisyen","Magyar","Bahasa Indonesia","Íslenska","Italiano","日本語","ქართული","ಕನ್ನಡ","한국어","Lietuvių","Latviešu","Македонски","मराठी","Bahasa Melayu","Malti","Nederlands","Norsk","Polski","Português","Română","Русский","Slovenčina","Slovenščina","Shqip","Svenska","Kiswahili","தமிழ்","తెలుగు","ไทย","Filipino","Türkçe","Українська","اردو","Tiếng Việt","中文"
+        "English","العربية","Français","Afrikaans","Беларуская","Български","বাংলা","Català","Čeština","Cymraeg","Dansk","Deutsch","Ελληνικά","Esperanto","Español","Eesti","فارسی","Suomi","Gaeilge","Galego","ગુજરાતી","עברית","हिन्दी","Hrvatski","Kreyòl ayisyen","Magyar","Bahasa Indonesia","Íslenska","Italiano","日本語","ქართული","ಕನ್ನಡ","한국어","Lietuvių","Latviešu","Македонски","मराठी","Bahasa Melayu","Malti","Nederlands","Norsk","Polski","Português","Română","Русский","Slovenčina","Slovenščina","Shqip","Svenska","Kiswahili","தமிழ்","తెలుగు","ไทย","Filipino","Türkçe","Українська","اردو","Tiếng Việt","中文"
+
     };
     private static final String[] LANGUAGE_FLAGS = {
-        "🇬🇧","🇲🇦","🇿🇦","🇧🇾","🇧🇬","🇧🇩","🇪🇸","🇨🇿","🏴","🇩🇰","🇩🇪","🇬🇷","🌐","🇪🇸","🇪🇪","🇮🇷","🇫🇮","🇫🇷","🇮🇪","🇪🇸","🇮🇳","🇮🇱","🇮🇳","🇭🇷","🇭🇹","🇭🇺","🇮🇩","🇮🇸","🇮🇹","🇯🇵","🇬🇪","🇮🇳","🇰🇷","🇱🇹","🇱🇻","🇲🇰","🇮🇳","🇲🇾","🇲🇹","🇳🇱","🇳🇴","🇵🇱","🇵🇹","🇷🇴","🇷🇺","🇸🇰","🇸🇮","🇦🇱","🇸🇪","🇰🇪","🇮🇳","🇮🇳","🇹🇭","🇵🇭","🇹🇷","🇺🇦","🇵🇰","🇻🇳","🇨🇳"
+        "🇬🇧","🇲🇦","🇫🇷","🇿🇦","🇧🇾","🇧🇬","🇧🇩","🇪🇸","🇨🇿","🏴","🇩🇰","🇩🇪","🇬🇷","🌐","🇪🇸","🇪🇪","🇮🇷","🇫🇮","🇮🇪","🇪🇸","🇮🇳","🇮🇱","🇮🇳","🇭🇷","🇭🇹","🇭🇺","🇮🇩","🇮🇸","🇮🇹","🇯🇵","🇬🇪","🇮🇳","🇰🇷","🇱🇹","🇱🇻","🇲🇰","🇮🇳","🇲🇾","🇲🇹","🇳🇱","🇳🇴","🇵🇱","🇵🇹","🇷🇴","🇷🇺","🇸🇰","🇸🇮","🇦🇱","🇸🇪","🇰🇪","🇮🇳","🇮🇳","🇹🇭","🇵🇭","🇹🇷","🇺🇦","🇵🇰","🇻🇳","🇨🇳"
+
     };
-    private Spinner mosqueSpinner;
+    private ImageView homeWifiIcon;
+    private ImageView homeGeoIcon;
     private TextView mosqueHeader;
     private final List<MosqueProfile> mosqueProfiles = new ArrayList<>();
     private MosqueProfile selectedMosque;
@@ -140,6 +155,7 @@ class MainActivityV3 extends AppCompatActivity {
     private LocalDate displayedDate;
     private int selectedPage = PAGE_HOME;
     private ActivityResultLauncher<String[]> permissionRequest;
+    private Runnable pendingNearbyMosqueSearch;
 
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
@@ -186,6 +202,9 @@ class MainActivityV3 extends AppCompatActivity {
         }
         permissionRequest = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
             if (hasWifiPermissions()) scanWifi(false);
+            Runnable pending = pendingNearbyMosqueSearch;
+            pendingNearbyMosqueSearch = null;
+            if (pending != null && hasWifiPermissions()) pending.run();
         });
 
         buildUi();
@@ -210,10 +229,10 @@ class MainActivityV3 extends AppCompatActivity {
         header.addView(logo, logoParams);
         LinearLayout brand = column();
         brand.addView(text("Mosque Auto-Silent", 19, colors.text, true));
-        mosqueHeader = text(selectedMosque.name + (selectedMosque.id.equals("tarfaya") ? " · Meknes" : ""), 12, colors.muted, false);
+        mosqueHeader = textRaw(selectedMosque.name + (selectedMosque.id.equals("tarfaya") ? " · Meknes" : ""), 12, colors.muted, false);
         brand.addView(mosqueHeader);
         header.addView(brand, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView version = text("0.5", 11, colors.green, true);
+        TextView version = text("0.7", 11, colors.green, true);
         version.setGravity(Gravity.CENTER);
         version.setBackground(roundRect(colors.goodSoft, dp(14), colors.goodSoft));
         header.addView(version, new LinearLayout.LayoutParams(dp(44), dp(30)));
@@ -327,9 +346,9 @@ class MainActivityV3 extends AppCompatActivity {
         addSection(page, "MOSQUE");
         LinearLayout mosqueCard = card();
         mosqueCard.addView(text("Selected mosque", 14, colors.text, true));
-        mosqueSpinner = new Spinner(this);
-        refreshMosqueChoices();
-        mosqueCard.addView(mosqueSpinner);
+        mosqueSelector = selectorRaw(selectedMosque.name);
+        mosqueSelector.setOnClickListener(v -> showMosquePicker());
+        mosqueCard.addView(mosqueSelector, matchWrap());
         Button addMosque = button("Add a mosque", false);
         mosqueCard.addView(addMosque, matchWrap());
         addMosque.setOnClickListener(v -> showAddMosqueDialog());
@@ -338,12 +357,9 @@ class MainActivityV3 extends AppCompatActivity {
         addSection(page, "WI-FI PRESENCE");
         LinearLayout wifiCard = card();
         wifiCard.addView(text("Selected mosque network", 14, colors.text, true));
-        ssidSpinner = new Spinner(this);
-        ArrayAdapter<String> ssidAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item,
-            new ArrayList<>(java.util.Collections.singletonList(L("Refresh networks to choose an SSID"))));
-        ssidAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        ssidSpinner.setAdapter(ssidAdapter);
-        wifiCard.addView(ssidSpinner);
+        ssidSelector = selector("Refresh networks to choose an SSID");
+        ssidSelector.setOnClickListener(v -> showWifiPicker());
+        wifiCard.addView(ssidSelector, matchWrap());
         wifiScanInfo = text("No scan yet", 12, colors.muted, false);
         wifiCard.addView(wifiScanInfo);
         Button scan = button("Refresh Wi-Fi networks", true);
@@ -471,28 +487,22 @@ class MainActivityV3 extends AppCompatActivity {
         addSection(page, "LANGUAGE");
         LinearLayout language = card();
         language.addView(text("App language", 14, colors.text, true));
-        Spinner languageSpinner = new Spinner(this);
         String[] languageOptions = new String[LANGUAGE_CODES.length];
         int selectedLanguage = 0;
         for (int i = 0; i < languageOptions.length; i++) {
             languageOptions[i] = LANGUAGE_FLAGS[i] + "  " + LANGUAGE_NAMES[i];
             if (LANGUAGE_CODES[i].equals(appLanguageCode)) selectedLanguage = i;
         }
-        ArrayAdapter<String> languageAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, languageOptions);
-        languageAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        languageSpinner.setAdapter(languageAdapter);
-        languageSpinner.setSelection(selectedLanguage);
-        languageSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                String chosen = LANGUAGE_CODES[position];
-                if (!chosen.equals(appLanguageCode)) {
-                    store.edit().putString("app_language", chosen).putBoolean("arabic_language", "ar".equals(chosen)).apply();
-                    recreate();
-                }
+        String languageValue = LANGUAGE_FLAGS[selectedLanguage] + "  " + LANGUAGE_NAMES[selectedLanguage];
+        TextView languageSelector = selector(languageValue);
+        languageSelector.setOnClickListener(v -> showChoiceDialog(L("App language"), Arrays.asList(languageOptions), languageValue, true, false, chosenValue -> {
+            int position = java.util.Arrays.asList(languageOptions).indexOf(chosenValue);
+            if (position >= 0 && !LANGUAGE_CODES[position].equals(appLanguageCode)) {
+                store.edit().putString("app_language", LANGUAGE_CODES[position]).putBoolean("arabic_language", "ar".equals(LANGUAGE_CODES[position])).apply();
+                recreate();
             }
-            @Override public void onNothingSelected(AdapterView<?> parent) {}
-        });
-        language.addView(languageSpinner);
+        }));
+        language.addView(languageSelector, matchWrap());
         translationInfo = text(L("English and Arabic are built in. Other languages use on-device ML Kit and download their model over Wi-Fi."),
             12, colors.muted, false);
         language.addView(translationInfo);
@@ -501,25 +511,18 @@ class MainActivityV3 extends AppCompatActivity {
         addSection(page, "APPEARANCE");
         LinearLayout appearance = card();
         appearance.addView(text("Theme", 14, colors.text, true));
-        Spinner themeSpinner = new Spinner(this);
         String[] themes = {L("Follow device"), L("Light"), L("Dark")};
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, themes);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        themeSpinner.setAdapter(adapter);
         int mode = store.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
-        themeSpinner.setSelection(mode == AppCompatDelegate.MODE_NIGHT_NO ? 1 : mode == AppCompatDelegate.MODE_NIGHT_YES ? 2 : 0);
-        themeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                int selectedMode = position == 1 ? AppCompatDelegate.MODE_NIGHT_NO :
-                    position == 2 ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;
-                if (selectedMode != store.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)) {
-                    store.edit().putInt(KEY_THEME_MODE, selectedMode).apply();
-                    AppCompatDelegate.setDefaultNightMode(selectedMode);
-                }
-            }
-            @Override public void onNothingSelected(AdapterView<?> parent) {}
-        });
-        appearance.addView(themeSpinner);
+        int themePosition = mode == AppCompatDelegate.MODE_NIGHT_NO ? 1 : mode == AppCompatDelegate.MODE_NIGHT_YES ? 2 : 0;
+        TextView themeSelector = selector(themes[themePosition]);
+        themeSelector.setOnClickListener(v -> showChoiceDialog(L("Theme"), Arrays.asList(themes), themes[themePosition], false, false, chosen -> {
+            int position = Arrays.asList(themes).indexOf(chosen);
+            int selectedMode = position == 1 ? AppCompatDelegate.MODE_NIGHT_NO :
+                position == 2 ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;
+            store.edit().putInt(KEY_THEME_MODE, selectedMode).apply();
+            AppCompatDelegate.setDefaultNightMode(selectedMode);
+        }));
+        appearance.addView(themeSelector, matchWrap());
         page.addView(appearance);
 
         addSection(page, "TEST OVERRIDES");
@@ -577,24 +580,16 @@ class MainActivityV3 extends AppCompatActivity {
     }
 
     private void refreshMosqueChoices() {
-        if (mosqueSpinner == null) return;
-        List<String> names = new ArrayList<>();
-        int selectedIndex = 0;
-        for (int i = 0; i < mosqueProfiles.size(); i++) {
-            MosqueProfile profile = mosqueProfiles.get(i);
-            names.add(L(profile.name));
-            if (profile.id.equals(selectedMosque.id)) selectedIndex = i;
-        }
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, names);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        mosqueSpinner.setAdapter(adapter);
-        mosqueSpinner.setSelection(selectedIndex);
-        mosqueSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                MosqueProfile chosen = mosqueProfiles.get(position);
-                if (selectedMosque == null || !selectedMosque.id.equals(chosen.id)) selectMosque(chosen);
-            }
-            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        if (mosqueSelector != null && selectedMosque != null) mosqueSelector.setText(selectedMosque.name + "     \u2304");
+    }
+
+    private void showMosquePicker() {
+        List<String> options = new ArrayList<>();
+        for (MosqueProfile profile : mosqueProfiles) options.add(profile.name);
+        String selected = selectedMosque.name;
+        showChoiceDialog(L("Selected mosque"), options, selected, true, false, value -> {
+            int index = options.indexOf(value);
+            if (index >= 0) selectMosque(mosqueProfiles.get(index));
         });
     }
 
@@ -607,7 +602,7 @@ class MainActivityV3 extends AppCompatActivity {
         }
         selectedMosque = profile;
         store.edit().putString("selected_mosque_id", profile.id).apply();
-        if (mosqueHeader != null) mosqueHeader.setText(L(profile.name + (profile.id.equals("tarfaya") ? " · Meknes" : "")));
+        if (mosqueHeader != null) mosqueHeader.setText(profile.name + (profile.id.equals("tarfaya") ? " · Meknes" : ""));
         if (locationInfo != null) locationInfo.setText(L(profile.hasPrayerCalendar
             ? "Selected mosque location: Tarfaya, Meknes." : "Selected mosque saved. Its prayer calendar is not configured yet."));
         refreshScheduleRows();
@@ -616,41 +611,181 @@ class MainActivityV3 extends AppCompatActivity {
     }
 
     private void showAddMosqueDialog() {
-        LinearLayout fields = column();
-        fields.setPadding(dp(20), dp(8), dp(20), 0);
-        EditText name = new EditText(this);
-        name.setSingleLine(true);
-        name.setHint(L("Mosque name"));
-        fields.addView(name);
-        EditText latitude = new EditText(this);
-        latitude.setSingleLine(true);
-        latitude.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
-        latitude.setHint(L("Latitude (for example 33.90)"));
-        fields.addView(latitude);
-        EditText longitude = new EditText(this);
-        longitude.setSingleLine(true);
-        longitude.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
-        longitude.setHint(L("Longitude (for example -5.54)"));
-        fields.addView(longitude);
+        LinearLayout content = column();
+        applyAppDirection(content);
+        content.setPadding(dp(18), dp(8), dp(18), dp(4));
+        EditText search = new EditText(this);
+        search.setSingleLine(true);
+        search.setTextSize(15);
+        search.setHint(L("Mosque name and city"));
+        search.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        search.setPadding(dp(14), dp(8), dp(14), dp(8));
+        search.setBackground(roundRect(colors.background, dp(14), colors.border));
+        content.addView(search);
+        TextView helper = text(L("Search for the mosque and city, then choose the matching location."), 12, colors.muted, false);
+        helper.setPadding(dp(3), dp(5), dp(3), dp(5));
+        content.addView(helper);
+        LinearLayout actions = row();
+        Button find = button("Find mosque", true);
+        Button nearby = button("Nearby suggestions", false);
+        actions.addView(find, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        View gap = new View(this);
+        actions.addView(gap, new LinearLayout.LayoutParams(dp(8), 1));
+        actions.addView(nearby, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        content.addView(actions);
+        ScrollView resultScroll = new ScrollView(this);
+        LinearLayout results = column();
+        resultScroll.addView(results);
+        LinearLayout.LayoutParams resultsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(195));
+        resultsParams.topMargin = dp(8);
+        content.addView(resultScroll, resultsParams);
+        TextView chosenLocation = text(L("Choose a search result to fill the mosque location."), 12, colors.muted, false);
+        chosenLocation.setPadding(dp(3), dp(8), dp(3), dp(4));
+        content.addView(chosenLocation);
+        double[] chosenCoordinates = {Double.NaN, Double.NaN};
+        String[] chosenName = {null};
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle(L("Add a mosque"))
-            .setView(fields).setPositiveButton(L("Save mosque"), null).setNegativeButton(L("Cancel"), null).create();
-        dialog.setOnShowListener(unused -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String mosqueName = name.getText().toString().trim();
-            try {
-                double lat = Double.parseDouble(latitude.getText().toString().trim());
-                double lon = Double.parseDouble(longitude.getText().toString().trim());
-                if (mosqueName.isEmpty() || lat < -90 || lat > 90 || lon < -180 || lon > 180) throw new IllegalArgumentException();
-                MosqueProfile profile = new MosqueProfile("custom_" + System.currentTimeMillis(), mosqueName, lat, lon, false);
-                mosqueProfiles.add(profile);
-                saveCustomMosques();
-                selectMosque(profile);
-                refreshMosqueChoices();
-                dialog.dismiss();
-            } catch (RuntimeException ex) {
-                Toast.makeText(this, L("Enter a mosque name and valid latitude and longitude."), Toast.LENGTH_LONG).show();
+            .setView(content).setPositiveButton(L("Save mosque"), null).setNegativeButton(L("Cancel"), null).create();
+
+        Consumer<Boolean> searchAction = nearbySearch -> {
+            String query = nearbySearch ? "mosque" : search.getText().toString().trim();
+            if (query.isEmpty()) {
+                Toast.makeText(this, L("Enter a mosque name and city."), Toast.LENGTH_SHORT).show();
+                return;
             }
+            Location bias = lastKnownSearchLocation();
+            if (nearbySearch && bias == null && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED) {
+                pendingNearbyMosqueSearch = () -> geocodeMosques(query, search, results, chosenLocation, chosenCoordinates, chosenName, true);
+                permissionRequest.launch(new String[]{Manifest.permission.ACCESS_FINE_LOCATION});
+                return;
+            }
+            geocodeMosques(query, search, results, chosenLocation, chosenCoordinates, chosenName, nearbySearch);
+        };
+        find.setOnClickListener(v -> searchAction.accept(false));
+        nearby.setOnClickListener(v -> searchAction.accept(true));
+        dialog.setOnShowListener(unused -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String mosqueName = search.getText().toString().trim();
+            if (chosenName[0] == null || !mosqueName.equals(chosenName[0]) ||
+                !Double.isFinite(chosenCoordinates[0]) || !Double.isFinite(chosenCoordinates[1])) {
+                Toast.makeText(this, L("Search and choose the correct mosque location first."), Toast.LENGTH_LONG).show();
+                return;
+            }
+            MosqueProfile profile = new MosqueProfile("custom_" + System.currentTimeMillis(), mosqueName,
+                chosenCoordinates[0], chosenCoordinates[1], false);
+            mosqueProfiles.add(profile);
+            saveCustomMosques();
+            selectMosque(profile);
+            refreshMosqueChoices();
+            dialog.dismiss();
         }));
         dialog.show();
+        styleBottomDialog(dialog, true);
+    }
+
+    private Location lastKnownSearchLocation() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null;
+        LocationManager manager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        if (manager == null) return null;
+        Location best = null;
+        for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER}) {
+            try {
+                Location candidate = manager.getLastKnownLocation(provider);
+                if (candidate != null && (best == null || candidate.getTime() > best.getTime())) best = candidate;
+            } catch (SecurityException ignored) { }
+        }
+        return best;
+    }
+
+    private void geocodeMosques(String query, EditText search, LinearLayout results, TextView chosenLocation,
+                               double[] chosenCoordinates, String[] chosenName, boolean nearbyOnly) {
+        if (!Geocoder.isPresent()) {
+            chosenLocation.setText(L("Location search is not available on this device."));
+            return;
+        }
+        chosenLocation.setText(L("Searching map locations..."));
+        results.removeAllViews();
+        Location bias = lastKnownSearchLocation();
+        Geocoder geocoder = new Geocoder(this, Locale.getDefault());
+        Geocoder.GeocodeListener listener = new Geocoder.GeocodeListener() {
+            @Override public void onGeocode(List<Address> addresses) {
+                if ((addresses == null || addresses.isEmpty()) && bias != null && !nearbyOnly) {
+                    geocoder.getFromLocationName(query, 5, this);
+                    return;
+                }
+                runOnUiThread(() -> showMosqueResults(query, addresses, search, results, chosenLocation,
+                    chosenCoordinates, chosenName, bias, nearbyOnly));
+            }
+            @Override public void onError(String errorMessage) {
+                runOnUiThread(() -> chosenLocation.setText(L("Search failed. Check your connection and try again.")));
+            }
+        };
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (bias != null) {
+                double lat = bias.getLatitude(), lon = bias.getLongitude();
+                geocoder.getFromLocationName(query, 5, Math.max(-90, lat - 0.25), Math.max(-180, lon - 0.25),
+                    Math.min(90, lat + 0.25), Math.min(180, lon + 0.25), listener);
+            } else geocoder.getFromLocationName(query, 5, listener);
+        } else {
+            new Thread(() -> {
+                List<Address> found = null;
+                try {
+                    if (bias != null) {
+                        double lat = bias.getLatitude(), lon = bias.getLongitude();
+                        found = geocoder.getFromLocationName(query, 5, Math.max(-90, lat - 0.25), Math.max(-180, lon - 0.25),
+                            Math.min(90, lat + 0.25), Math.min(180, lon + 0.25));
+                    } else found = geocoder.getFromLocationName(query, 5);
+                    if ((found == null || found.isEmpty()) && bias != null && !nearbyOnly)
+                        found = geocoder.getFromLocationName(query, 5);
+                } catch (Exception ignored) { }
+                List<Address> result = found;
+                runOnUiThread(() -> showMosqueResults(query, result, search, results, chosenLocation,
+                    chosenCoordinates, chosenName, bias, nearbyOnly));
+            }, "mosque-geocoder").start();
+        }
+    }
+
+    private void showMosqueResults(String query, List<Address> addresses, EditText search, LinearLayout results,
+                                   TextView chosenLocation, double[] chosenCoordinates, String[] chosenName,
+                                   Location bias, boolean nearbyOnly) {
+        results.removeAllViews();
+        if (addresses == null || addresses.isEmpty()) {
+            chosenLocation.setText(L("No locations found. Try adding a more specific city."));
+            return;
+        }
+        List<Address> matches = new ArrayList<>(addresses);
+        if (bias != null) matches.sort((a, b) -> Float.compare(distanceFrom(bias, a), distanceFrom(bias, b)));
+        for (Address address : matches) {
+            String line = address.getMaxAddressLineIndex() >= 0 ? address.getAddressLine(0) : "";
+            String feature = address.getFeatureName();
+            String displayName = feature == null || feature.trim().isEmpty() || "mosque".equalsIgnoreCase(query)
+                ? (nearbyOnly && !line.isEmpty() ? "Mosque - " + line : query) : feature;
+            String detail = line.isEmpty() ? String.format(Locale.getDefault(), "%.5f, %.5f", address.getLatitude(), address.getLongitude()) : line;
+            LinearLayout option = column();
+            option.setPadding(dp(13), dp(7), dp(13), dp(7));
+            option.setBackground(rippleBackground(colors.surface, dp(14), colors.border));
+            option.addView(textRaw(displayName, 14, colors.text, true));
+            option.addView(textRaw(detail, 11, colors.muted, false));
+            LinearLayout.LayoutParams optionParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+            optionParams.bottomMargin = dp(6);
+            option.setOnClickListener(v -> {
+                chosenCoordinates[0] = address.getLatitude();
+                chosenCoordinates[1] = address.getLongitude();
+                chosenName[0] = displayName;
+                search.setText(displayName);
+                search.setSelection(search.length());
+                chosenLocation.setText(L("Location selected. Coordinates have been filled from the map result."));
+            });
+            results.addView(option, optionParams);
+        }
+        chosenLocation.setText(L("Choose the result that matches your mosque. Location results may need on-site verification."));
+    }
+
+    private float distanceFrom(Location origin, Address address) {
+        float[] distance = new float[1];
+        Location.distanceBetween(origin.getLatitude(), origin.getLongitude(), address.getLatitude(), address.getLongitude(), distance);
+        return distance[0];
     }
 
     private void saveCustomMosques() {
@@ -704,15 +839,16 @@ class MainActivityV3 extends AppCompatActivity {
             LinearLayout scheduleCard = row();
             scheduleCard.setGravity(Gravity.CENTER_VERTICAL);
             scheduleCard.setPadding(dp(14), dp(11), dp(14), dp(11));
+            scheduleCard.setMinimumHeight(dp(82));
             scheduleCard.setBackground(roundRect(colors.surface, dp(17), colors.border));
-            LinearLayout.LayoutParams outer = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(70));
+            LinearLayout.LayoutParams outer = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             outer.bottomMargin = dp(7);
             LinearLayout left = column();
             left.addView(text(event.prayer, 14, colors.text, true));
             left.addView(text("Adhan " + event.adhanText, 11, colors.muted, false));
             scheduleCard.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             LinearLayout right = column();
-            right.setGravity(Gravity.RIGHT);
+            right.setGravity(Gravity.END);
             right.addView(text(timeOf(event.iqamaAt), 15, colors.green, true));
             right.addView(text("Iqama " + event.offsetLabel(), 10, colors.muted, false));
             scheduleCard.addView(right);
@@ -760,16 +896,18 @@ class MainActivityV3 extends AppCompatActivity {
         boolean wifiConfigured = manualWifiOverride || !selectedSsid.isEmpty();
         WifiScanner.Network selectedNetwork = null;
         for (WifiScanner.Network network : wifiNetworks) if (network.ssid.equals(selectedSsid)) selectedNetwork = network;
-        String strength = selectedNetwork == null ? "" : "\n" + L("Signal") + " " + selectedNetwork.signalPercent +
-            "% · " + selectedNetwork.rssiDbm + " dBm";
+        String strength = selectedNetwork == null ? "" : "\n" + L("RSSI") + " " + selectedNetwork.rssiDbm + " dBm";
+        if (homeWifiSignalBars != null) homeWifiSignalBars.setSignal(selectedNetwork == null ? 0 : selectedNetwork.signalPercent);
         homeWifiStatus.setText(L("WI-FI") + "\n" + L(wifi ? "PRESENT" : wifiConfigured ? "NOT DETECTED" : "NOT SET") +
             (selectedSsid.isEmpty() ? "" : "\n" + selectedSsid) + strength);
         homeWifiStatus.setTextColor(wifi ? colors.good : wifiConfigured ? colors.bad : colors.waiting);
+        if (homeWifiIcon != null) homeWifiIcon.setColorFilter(wifi ? colors.good : wifiConfigured ? colors.bad : colors.waiting);
         homeWifiStatus.setBackground(roundRect(wifi ? colors.goodSoft : wifiConfigured ? colors.badSoft : colors.waitingSoft,
             dp(19), wifi ? colors.goodSoft : wifiConfigured ? colors.badSoft : colors.waitingSoft));
         homeGeoStatus.setText(L("GEOFENCE") + "\n" + L(inside ? "INSIDE" : "OUTSIDE") + "\n" +
             L(geofenceRadiusMetres + " m radius"));
         homeGeoStatus.setTextColor(inside ? colors.good : colors.bad);
+        if (homeGeoIcon != null) homeGeoIcon.setColorFilter(inside ? colors.good : colors.bad);
         homeGeoStatus.setBackground(roundRect(inside ? colors.goodSoft : colors.badSoft, dp(19), inside ? colors.goodSoft : colors.badSoft));
 
         long nextAt = nextFutureIqama(now);
@@ -887,30 +1025,51 @@ class MainActivityV3 extends AppCompatActivity {
             ssids.clear();
             for (WifiScanner.Network network : found) ssids.add(network.ssid);
             if (fresh) lastFreshScan = System.currentTimeMillis();
-            List<String> choices = new ArrayList<>();
-            choices.add(L(ssids.isEmpty() ? "No networks found" : "Select a Wi-Fi network"));
-            for (WifiScanner.Network network : found) choices.add(String.format(Locale.getDefault(),
-                "%s · %d%% · %d dBm", network.ssid, network.signalPercent, network.rssiDbm));
-            ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, choices);
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-            ssidSpinner.setAdapter(adapter);
-            int selected = ssids.indexOf(selectedSsid);
-            ssidSpinner.setSelection(selected < 0 ? 0 : selected + 1);
-            ssidSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-                @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                    if (position <= 0) return;
-                    if (position - 1 >= ssids.size()) return;
-                    selectedSsid = ssids.get(position - 1);
-                    store.edit().putString("selected_ssid", selectedSsid).apply();
-                    evaluateState();
-                }
-                @Override public void onNothingSelected(AdapterView<?> parent) {}
-            });
+            if (ssidSelector != null) ssidSelector.setText(L(selectedSsid.isEmpty()
+                ? (ssids.isEmpty() ? "No networks found" : "Select a Wi-Fi network") : selectedSsid) + "     \u2304");
             wifiScanInfo.setText(L((fresh ? "Fresh scan" : "Cached / throttled scan") + " · " + found.size() + " networks · " +
                 new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date())));
             evaluateState();
             if (showToast) Toast.makeText(this, L("Wi-Fi list refreshed"), Toast.LENGTH_SHORT).show();
         }));
+    }
+
+    private void showWifiPicker() {
+        if (wifiNetworks.isEmpty()) {
+            Toast.makeText(this, L("Refresh networks to choose an SSID"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        LinearLayout list = column();
+        applyAppDirection(list);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(list);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(L("Selected mosque network"))
+            .setView(scroll).setNegativeButton(L("Cancel"), null).create();
+        for (WifiScanner.Network network : wifiNetworks) {
+            LinearLayout option = row();
+            option.setGravity(Gravity.CENTER_VERTICAL);
+            option.setPadding(dp(13), dp(8), dp(13), dp(8));
+            option.setBackground(rippleBackground(network.ssid.equals(selectedSsid) ? colors.goodSoft : colors.surface, dp(15), colors.border));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64));
+            params.bottomMargin = dp(6);
+            SignalBarsView bars = new SignalBarsView(this);
+            bars.setSignal(network.signalPercent);
+            option.addView(bars, new LinearLayout.LayoutParams(dp(42), dp(28)));
+            LinearLayout details = column();
+            details.addView(textRaw(network.ssid, 14, colors.text, true));
+            details.addView(text(network.rssiDbm + " dBm", 11, colors.muted, false));
+            option.addView(details, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            option.setOnClickListener(v -> {
+                selectedSsid = network.ssid;
+                store.edit().putString("selected_ssid", selectedSsid).apply();
+                if (ssidSelector != null) ssidSelector.setText(selectedSsid + "     \u2304");
+                evaluateState();
+                dialog.dismiss();
+            });
+            list.addView(option, params);
+        }
+        dialog.show();
+        styleBottomDialog(dialog, false);
     }
 
     private void ensureLocationForGeofence() {
@@ -1001,27 +1160,172 @@ class MainActivityV3 extends AppCompatActivity {
         addSpace(page, 10);
     }
 
+    private void applyAppDirection(View view) {
+        boolean rtl = "ar".equals(appLanguageCode) || "fa".equals(appLanguageCode) ||
+            "he".equals(appLanguageCode) || "ur".equals(appLanguageCode);
+        view.setLayoutDirection(rtl ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR);
+    }
+
+    private TextView selector(String value) {
+        return selectorRaw(L(value));
+    }
+
+    private TextView selectorRaw(String value) {
+        TextView field = textRaw(value, 14, colors.text, true);
+        field.setText(value + "     \u2304");
+        field.setSingleLine(true);
+        field.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        field.setPaddingRelative(dp(15), dp(12), dp(15), dp(12));
+        field.setMinHeight(dp(52));
+        field.setBackground(rippleBackground(colors.surface, dp(15), colors.border));
+        return field;
+    }
+
+    private void showChoiceDialog(String title, List<String> options, String selected,
+                                  boolean searchable, boolean translateOptions, Consumer<String> onSelected) {
+        LinearLayout content = column();
+        applyAppDirection(content);
+        content.setPadding(dp(18), dp(18), dp(18), dp(12));
+        TextView heading = text(title, 20, colors.text, true);
+        heading.setPadding(dp(3), dp(5), dp(3), dp(12));
+        content.addView(heading);
+        EditText search = null;
+        if (searchable) {
+            search = new EditText(this);
+            search.setSingleLine(true);
+            search.setTextSize(15);
+            search.setHint(L("Search"));
+            search.setPadding(dp(14), dp(7), dp(14), dp(7));
+            search.setBackground(roundRect(colors.background, dp(14), colors.border));
+            content.addView(search, matchWrap());
+        }
+        final EditText searchInput = search;
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        LinearLayout choices = column();
+        scroll.addView(choices);
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            searchable ? dp(410) : ViewGroup.LayoutParams.WRAP_CONTENT);
+        scrollParams.topMargin = dp(10);
+        content.addView(scroll, scrollParams);
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(content).create();
+        Runnable refresh = () -> {
+            choices.removeAllViews();
+            String filter = searchInput == null ? "" : searchInput.getText().toString().trim().toLowerCase(Locale.ROOT);
+            int shown = 0;
+            for (String option : options) {
+                String visible = translateOptions ? L(option) : option;
+                if (!filter.isEmpty() && !visible.toLowerCase(Locale.ROOT).contains(filter)) continue;
+                TextView item = textRaw(visible, 15, colors.text, visible.equals(selected));
+                item.setPaddingRelative(dp(15), dp(10), dp(15), dp(10));
+                item.setMinHeight(dp(52));
+                item.setBackground(rippleBackground(visible.equals(selected) ? colors.goodSoft : colors.surface, dp(14), colors.border));
+                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+                rowParams.bottomMargin = dp(5);
+                item.setOnClickListener(v -> {
+                    onSelected.accept(option);
+                    dialog.dismiss();
+                });
+                choices.addView(item, rowParams);
+                shown++;
+            }
+            if (shown == 0) choices.addView(text("No matches", 13, colors.muted, false));
+        };
+        refresh.run();
+        if (searchInput != null) {
+            searchInput.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) { refresh.run(); }
+                @Override public void afterTextChanged(Editable s) {}
+            });
+        }
+        dialog.show();
+        styleBottomDialog(dialog, searchable);
+    }
+
+    private void styleBottomDialog(AlertDialog dialog, boolean expanded) {
+        if (dialog.getWindow() == null) return;
+        dialog.getWindow().setBackgroundDrawable(roundRect(colors.surface, dp(26), colors.border));
+        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        WindowManager.LayoutParams params = dialog.getWindow().getAttributes();
+        params.dimAmount = 0.34f;
+        params.gravity = Gravity.BOTTOM;
+        params.y = dp(8);
+        int width = getResources().getDisplayMetrics().widthPixels - dp(20);
+        params.width = width;
+        params.height = expanded ? Math.min((int) (getResources().getDisplayMetrics().heightPixels * 0.82f), dp(680))
+            : WindowManager.LayoutParams.WRAP_CONTENT;
+        dialog.getWindow().setAttributes(params);
+    }
+
+    private RippleDrawable rippleBackground(int fill, int radius, int stroke) {
+        int ripple = Color.argb(38, Color.red(colors.primaryAction), Color.green(colors.primaryAction), Color.blue(colors.primaryAction));
+        return new RippleDrawable(ColorStateList.valueOf(ripple), roundRect(fill, radius, stroke),
+            roundRect(Color.WHITE, radius, Color.WHITE));
+    }
+
+    private final class SignalBarsView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private int signal = 0;
+        SignalBarsView(Context context) { super(context); }
+        void setSignal(int percent) { signal = clamp(percent, 0, 100); invalidate(); }
+        @Override protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            int color = signal >= 67 ? colors.good : signal >= 34 ? colors.waiting : colors.bad;
+            float width = getWidth();
+            float height = getHeight();
+            float gap = width * 0.08f;
+            float barWidth = (width - gap * 3) / 4f;
+            for (int i = 0; i < 4; i++) {
+                float barHeight = height * (0.28f + i * 0.22f);
+                float left = i * (barWidth + gap);
+                paint.setColor(signal >= (i + 1) * 25 ? color : colors.border);
+                canvas.drawRoundRect(left, height - barHeight, left + barWidth, height, barWidth / 2f, barWidth / 2f, paint);
+            }
+        }
+    }
+
     private FrameLayout signalCard(String title, String status, String detail, int tint, int background, boolean wifi) {
         FrameLayout card = new FrameLayout(this);
         TextView label = text(title + "\n" + status + "\n" + detail, 11, tint, true);
         label.setGravity(Gravity.CENTER_VERTICAL);
-        label.setPaddingRelative(dp(14), dp(11), dp(44), dp(11));
+        label.setPaddingRelative(dp(44), dp(11), dp(45), dp(11));
         label.setBackground(roundRect(background, dp(19), background));
         if (wifi) homeWifiStatus = label; else homeGeoStatus = label;
         card.addView(label, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
+        ImageView statusIcon = new ImageView(this);
+        statusIcon.setImageResource(wifi ? R.drawable.ic_wifi : R.drawable.ic_location);
+        statusIcon.setColorFilter(tint);
+        if (wifi) homeWifiIcon = statusIcon; else homeGeoIcon = statusIcon;
+        FrameLayout.LayoutParams statusIconParams = new FrameLayout.LayoutParams(dp(25), dp(25), Gravity.START | Gravity.TOP);
+        statusIconParams.setMarginStart(dp(11));
+        statusIconParams.topMargin = dp(12);
+        card.addView(statusIcon, statusIconParams);
+        if (wifi) {
+            homeWifiSignalBars = new SignalBarsView(this);
+            FrameLayout.LayoutParams barsParams = new FrameLayout.LayoutParams(dp(35), dp(23), Gravity.END | Gravity.BOTTOM);
+            barsParams.setMarginEnd(dp(9));
+            barsParams.bottomMargin = dp(8);
+            card.addView(homeWifiSignalBars, barsParams);
+        }
+
         ImageButton refresh = new ImageButton(this);
         refresh.setImageResource(R.drawable.ic_refresh);
-        refresh.setColorFilter(colors.primaryAction);
+        refresh.setColorFilter(colors.onPrimary);
         refresh.setContentDescription(L(wifi ? "Refresh Wi-Fi networks" : "Refresh geofence"));
         refresh.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         refresh.setPadding(dp(7), dp(7), dp(7), dp(7));
-        refresh.setBackground(roundRect(background, dp(11), background));
-        FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.END | Gravity.TOP);
+        refresh.setElevation(dp(2));
+        refresh.setBackground(new RippleDrawable(ColorStateList.valueOf(0x44FFFFFF),
+            roundRect(colors.primaryAction, dp(12), colors.primaryAction), roundRect(Color.WHITE, dp(12), Color.WHITE)));
+        FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.END | Gravity.TOP);
         iconParams.topMargin = dp(7);
         iconParams.setMarginEnd(dp(7));
         card.addView(refresh, iconParams);
         refresh.setOnClickListener(v -> {
+            v.animate().rotationBy(180f).setDuration(260L).start();
             if (wifi) ensureWifiPermissionsAndScan();
             else refreshGeofenceFromHome();
         });
@@ -1093,8 +1397,12 @@ class MainActivityV3 extends AppCompatActivity {
     }
 
     private TextView text(String value, int size, int color, boolean bold) {
+        return textRaw(L(value), size, color, bold);
+    }
+
+    private TextView textRaw(String value, int size, int color, boolean bold) {
         TextView view = new TextView(this);
-        view.setText(L(value));
+        view.setText(value);
         view.setTextSize(size);
         view.setTextColor(color);
         if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);

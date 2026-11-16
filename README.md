@@ -1,6 +1,6 @@
 # Mosque Auto-Silent
 
-## Android prototype v0.6.0
+## Android prototype v0.7.0
 
 Mosque Auto-Silent helps an attendee's Android phone silence its ringer during prayer. Activation requires both a selected Wi-Fi SSID and geofence presence. The app saves and restores the phone's previous ringer profile.
 
@@ -20,13 +20,13 @@ Silence starts 30 seconds before Iqama. Restore defaults to 10 minutes after Iqa
 
 ### Mosque, language and appearance
 
-Setup lets the operator select Tarfaya or add local mosque profiles with names and coordinates. Tarfaya is the only profile with prayer calendar data; other profiles report that their calendar is missing and scheduled activation stays unavailable until their local timings are added. No MAWAQIT API is connected.
+Setup lets the operator select Tarfaya or add local mosque profiles. Add Mosque now searches by mosque name and city, with an optional nearby search biased by the phone's last known location. Choosing a result fills its coordinates; the user does not type latitude/longitude. Android's system geocoder can return no result and its locations are best guesses, so verify a selected mosque's pin on site. Tarfaya is the only profile with prayer calendar data; other profiles report that their calendar is missing and scheduled activation stays unavailable until their local timings are added. No MAWAQIT API is connected.
 
 The More page has a native-name language dropdown with flag markers for English, Arabic and the languages supported by Google ML Kit on-device translation. Google describes ML Kit as a free mobile SDK; language models are about 30 MB each, and this app downloads the selected model over Wi-Fi. English and the reviewed Arabic phrasebook work immediately; other languages are translated on the phone after their model downloads. English stays visible as a fallback while the model downloads or if translation fails. These additional translations are machine generated and have not been reviewed for prayer or safety-critical wording. The app does not call Google Cloud Translation or require a Cloud API key. The faint Moroccan-style vector background is inspired by the submitted mosque's horseshoe arches, tiled columns, carved details and carpet tones. It is an original design rather than a faded photo.
 
 ### Home signals and refresh
 
-Home has separate refresh icons for Wi-Fi scanning and the configured geofence. Wi-Fi results show estimated signal strength as a percentage and RSSI in dBm. The app applies system-bar insets and scroll padding so content clears the status/navigation bars and the last rows remain reachable.
+Home has separate, high-contrast refresh icons for Wi-Fi scanning and the configured geofence. Wi-Fi strength uses a color-coded signal bars icon; the selected network still shows RSSI in dBm. Language, mosque, theme and Wi-Fi choices use searchable rounded selection sheets. Prayer schedule cards size to their text so Adhan and Iqama labels remain visible in English and Arabic. The app applies system-bar insets and scroll padding so content clears the status/navigation bars and the last rows remain reachable.
 
 ### Imam controls and boundaries
 
